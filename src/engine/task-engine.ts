@@ -102,6 +102,10 @@ export class TaskEngine {
   async confirmGate(taskId: string, decision: GateDecision): Promise<Task> {
     const task = this.requireTask(taskId);
 
+    if (task.status === "done") {
+      throw new Error(`cannot ${decision.kind} a completed task ${taskId}`);
+    }
+
     if (decision.kind === "stop") {
       return this.store.updateTask(taskId, { status: "stopped" });
     }
