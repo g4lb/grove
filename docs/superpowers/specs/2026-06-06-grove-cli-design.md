@@ -1,12 +1,12 @@
-# flow — AI Development Orchestration CLI — Design Spec
+# grove — AI Development Orchestration CLI — Design Spec
 
 **Date:** 2026-06-06
 **Status:** Approved (pending final spec review)
-**Working name:** `flow` (placeholder, renameable)
+**Name:** `grove` (group of trees = isolated git worktrees)
 
 ## 1. Overview
 
-`flow` is a standalone, cross-platform CLI that orchestrates AI-driven software
+`grove` is a standalone, cross-platform CLI that orchestrates AI-driven software
 development inside isolated environments. A user installs it (`brew` / `curl`),
 runs `init`, and is presented with a menu:
 
@@ -77,7 +77,7 @@ Concrete impls are adapters. Swapping SQLite for a stronger DB (Postgres/Turso)
 
 The engine talks only to a `Store` interface
 (`createTask`, `updateTask`, `queryTasks`, `appendEvent`, `updatePhaseRun`, …).
-`SqliteStore` is the first adapter — a single file at `~/.flow/flow.db`
+`SqliteStore` is the first adapter — a single file at `~/.grove/grove.db`
 (driver bundled in the binary). SQLite chosen over flat JSON for queryable list
 views and concurrent-ish status writes (future daemon writing while TUI reads).
 
@@ -91,7 +91,7 @@ views and concurrent-ish status writes (future daemon writing while TUI reads).
 - **`events`** — append-only per-task log for live feed + audit:
   `task_id`, `ts`, `type`, `payload`.
 
-Agent transcripts/logs are **files** under `~/.flow/tasks/<id>/`, referenced by
+Agent transcripts/logs are **files** under `~/.grove/tasks/<id>/`, referenced by
 path (not blobbed into SQLite).
 
 ### 4.3 Lifecycle state machine
@@ -124,7 +124,7 @@ crash/quit resumes from the last good phase.
 ### 5.1 `WorktreeManager` — isolated code
 
 - `create(taskId, repoPath)` → git worktree at
-  `~/.flow/tasks/<id>/worktree` on branch `flow/<id>-<slug>`.
+  `~/.grove/tasks/<id>/worktree` on branch `grove/<id>-<slug>`.
 - `remove(taskId)`, `list()`, `getDiff(taskId)`.
 - One task = one worktree = one branch. No task touches another's files or the
   user's main checkout.
@@ -132,7 +132,7 @@ crash/quit resumes from the last good phase.
 ### 5.2 `ComposeManager` — isolated services
 
 - `up` / `down` / `status` / `logs` per task.
-- Isolation via unique Compose **project name** per task (`flow-<id>`):
+- Isolation via unique Compose **project name** per task (`grove-<id>`):
   containers, networks, volumes namespaced.
 - **Port collision strategy:** do not hardcode host ports; rely on the Compose
   project network for inter-service comms; allocate host ports dynamically only
@@ -146,7 +146,7 @@ crash/quit resumes from the last good phase.
 - `teardown(taskId)` = compose down + worktree remove.
 - **Teardown on finish** (after confirmed merge). If merge fails, keep the env,
   go `blocked`.
-- Orphan cleanup via `flow gc` (see §8).
+- Orphan cleanup via `grove gc` (see §8).
 
 Concrete impls shell out to `git` / `docker compose` through a small typed
 wrapper, so logic is mockable without real git/docker.
@@ -195,14 +195,15 @@ explicitly as a known v1 limitation.
 ### 7.1 Main menu
 
 ```
-  flow
+  grove
 
   ❯ 1. Start task      begin a new development workflow
     2. Debug issue     (coming in v1.1)
     3. List            view all tasks & their status
     q. Quit
 
-  hint: run `flow doctor` to check your environment
+  hint: run `grove doctor` to check your environment
+
 ```
 
 ### 7.2 Start task flow
@@ -249,26 +250,26 @@ disk; a full disk breaks Docker, git, and the agent mid-phase.
 
 ### 8.1 `DiskMonitor` (read-only/advisory component)
 
-- Reports free space on the volume backing `~/.flow` and Docker's data root,
-  plus **flow-owned** usage (worktree sizes + `flow-<id>` volumes/images).
-- Surfaced in `flow doctor` and as a **TUI footer indicator** (amber/red under
+- Reports free space on the volume backing `~/.grove` and Docker's data root,
+  plus **grove-owned** usage (worktree sizes + `grove-<id>` volumes/images).
+- Surfaced in `grove doctor` and as a **TUI footer indicator** (amber/red under
   thresholds).
 
 ### 8.2 Guardrails (preflight, before provisioning)
 
 - Before `provision(taskId)`, check free space against thresholds
-  (**warn < 10 GB, block < 2 GB**, configurable in `~/.flow/config`).
+  (**warn < 10 GB, block < 2 GB**, configurable in `~/.grove/config`).
 - Below block threshold → task goes `blocked` **before** spending anything, with
-  a clear message pointing to `flow gc`. Never fail deep in a phase due to disk.
+  a clear message pointing to `grove gc`. Never fail deep in a phase due to disk.
 
 ### 8.3 Reclamation
 
 - **Teardown on finish** returns the biggest chunks (compose volumes/images +
   worktree).
-- **`flow gc`** reclaims **flow-owned resources only**: orphaned worktrees from
-  crashed tasks, dangling `flow-<id>` images/volumes/networks, flow-attributable
-  build cache. **Safety rule (explicit):** `flow gc` filters strictly on the
-  `flow-` project prefix / labels and **never** runs a blanket
+- **`grove gc`** reclaims **grove-owned resources only**: orphaned worktrees from
+  crashed tasks, dangling `grove-<id>` images/volumes/networks, grove-attributable
+  build cache. **Safety rule (explicit):** `grove gc` filters strictly on the
+  `grove-` project prefix / labels and **never** runs a blanket
   `docker system prune` — it never touches the user's unrelated Docker
   resources.
 - Per-task/global disk **quota** that pauses new provisioning — design-for-later.
@@ -287,7 +288,7 @@ The engine consults `DiskMonitor` at provisioning gates.
 - **Infra failures:** `compose up` failure → `blocked` before the agent starts;
   port conflicts surface as a named error with the conflicting port.
 - **Crash safety:** every transition persists to `Store` first → resume from
-  last good phase. Orphans reclaimable via `flow gc`.
+  last good phase. Orphans reclaimable via `grove gc`.
 - **Teardown safety:** finish-teardown only after a confirmed merge.
 
 ## 10. Testing Strategy
@@ -315,7 +316,7 @@ TDD throughout (failing test first), per the methodology the tool embodies.
 | Worktree + Compose isolation per task | Per-phase auto/gate policy config |
 | Own-agent loop via Agent SDK + bundled skills | Multi-provider / model-agnostic |
 | `Store` (SQLite adapter) | Stronger-DB adapter (Postgres/Turso) |
-| `DiskMonitor` + guardrails + `flow gc` | Disk quotas |
+| `DiskMonitor` + guardrails + `grove gc` | Disk quotas |
 | Teardown on finish | **Debug issue** workflow (v1.1) |
 
 ## 12. Open Questions / Future
