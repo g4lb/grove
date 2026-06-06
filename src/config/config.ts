@@ -5,6 +5,9 @@ export interface GroveConfig {
     warnBytes: number;
     blockBytes: number;
   };
+  agent: {
+    model: string;
+  };
 }
 
 export const DEFAULT_CONFIG: GroveConfig = {
@@ -12,21 +15,29 @@ export const DEFAULT_CONFIG: GroveConfig = {
     warnBytes: 10 * 1024 ** 3, // 10 GB
     blockBytes: 2 * 1024 ** 3, //  2 GB
   },
+  agent: {
+    model: "claude-opus-4-8",
+  },
 };
+
+function withDefaults(parsed: Partial<GroveConfig>): GroveConfig {
+  return {
+    disk: { ...DEFAULT_CONFIG.disk, ...(parsed.disk ?? {}) },
+    agent: { ...DEFAULT_CONFIG.agent, ...(parsed.agent ?? {}) },
+  };
+}
 
 export async function loadConfig(paths: GrovePaths): Promise<GroveConfig> {
   const file = Bun.file(paths.configFile);
-  if (!(await file.exists())) return { disk: { ...DEFAULT_CONFIG.disk } };
+  if (!(await file.exists())) return withDefaults({});
   let parsed: Partial<GroveConfig>;
   try {
     parsed = (await file.json()) as Partial<GroveConfig>;
   } catch {
     // Malformed config file — fall back to defaults rather than breaking every command.
-    return { disk: { ...DEFAULT_CONFIG.disk } };
+    return withDefaults({});
   }
-  return {
-    disk: { ...DEFAULT_CONFIG.disk, ...(parsed.disk ?? {}) },
-  };
+  return withDefaults(parsed);
 }
 
 export async function saveConfig(paths: GrovePaths, config: GroveConfig): Promise<void> {

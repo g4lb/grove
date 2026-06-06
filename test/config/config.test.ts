@@ -18,7 +18,7 @@ test("loadConfig returns defaults when no file exists", async () => {
 
 test("saveConfig then loadConfig round-trips overrides", async () => {
   const paths = tempPaths();
-  await saveConfig(paths, { disk: { warnBytes: 5, blockBytes: 1 } });
+  await saveConfig(paths, { disk: { warnBytes: 5, blockBytes: 1 }, agent: { model: "claude-opus-4-8" } });
   const cfg = await loadConfig(paths);
   expect(cfg.disk.warnBytes).toBe(5);
   expect(cfg.disk.blockBytes).toBe(1);
