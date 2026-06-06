@@ -1,0 +1,42 @@
+import { test, expect } from "bun:test";
+import { GitWorktreeManager } from "../../src/infra/worktree-manager.ts";
+import { GitRunner } from "../../src/infra/git-runner.ts";
+import type { CommandRunner, CommandResult } from "../../src/infra/command-runner.ts";
+import { resolvePaths } from "../../src/config/paths.ts";
+
+class ScriptedRunner implements CommandRunner {
+  calls: string[][] = [];
+  constructor(private script: (args: string[]) => CommandResult) {}
+  async run(_cmd: string, args: string[]): Promise<CommandResult> {
+    this.calls.push(args);
+    return this.script(args);
+  }
+}
+
+const OK = (stdout = ""): CommandResult => ({ code: 0, stdout, stderr: "" });
+
+test("create() makes a worktree on a grove/<id>-<slug> branch off HEAD", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner((args) => OK());
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+
+  const result = await mgr.create("task_1234abcd", "Add OAuth Login");
+
+  expect(result.branch).toBe("grove/1234abcd-add-oauth-login");
+  expect(result.worktreePath).toBe("/groveroot/tasks/task_1234abcd/worktree");
+
+  const addCall = runner.calls.find((a) => a.includes("worktree") && a.includes("add"))!;
+  expect(addCall).toContain("-b");
+  expect(addCall).toContain("grove/1234abcd-add-oauth-login");
+  expect(addCall).toContain("/groveroot/tasks/task_1234abcd/worktree");
+  expect(addCall[addCall.length - 1]).toBe("HEAD");
+});
+
+test("create() throws if git worktree add fails", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner(() => ({ code: 128, stdout: "", stderr: "fatal: already exists" }));
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+  await expect(mgr.create("task_1234abcd", "x")).rejects.toThrow("already exists");
+});
