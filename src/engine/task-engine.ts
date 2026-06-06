@@ -91,6 +91,27 @@ export class TaskEngine {
     return this.runFrom(task.id, "brainstorm", input.description);
   }
 
+  async confirmGate(taskId: string, decision: GateDecision): Promise<Task> {
+    const task = this.requireTask(taskId);
+
+    if (decision.kind === "stop") {
+      return this.store.updateTask(taskId, { status: "stopped" });
+    }
+
+    if (decision.kind === "rerun") {
+      // Re-run the current phase ("request changes" with feedback, or "retry" without).
+      return this.runFrom(taskId, task.currentPhase, undefined, decision.feedback);
+    }
+
+    // approve
+    if (task.status !== "waiting_confirm") {
+      throw new Error(`cannot approve task ${taskId} in status ${task.status}`);
+    }
+    const next = nextPhase(task.currentPhase);
+    if (!next) throw new Error(`no phase after ${task.currentPhase}`);
+    return this.runFrom(taskId, next);
+  }
+
   /** Run phases from `start` forward, persisting, until a gate / terminal / failure. */
   protected async runFrom(
     taskId: string,
