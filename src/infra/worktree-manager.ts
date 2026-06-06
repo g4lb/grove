@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { rmSync } from "node:fs";
 import type { GrovePaths } from "../config/paths.ts";
 import type { GitRunner } from "./git-runner.ts";
 import { slugify } from "./slug.ts";
@@ -45,9 +46,20 @@ export class GitWorktreeManager implements WorktreeManager {
 
   async remove(taskId: string): Promise<void> {
     const worktreePath = this.worktreePathFor(taskId);
-    // --force is required because a task worktree normally has uncommitted changes;
-    // the committed work lives on the grove/<...> branch, which is not deleted here.
-    await this.git.git(["worktree", "remove", "--force", worktreePath]);
+    try {
+      // --force is required because a task worktree normally has uncommitted changes;
+      // the committed work lives on the grove/<...> branch, which is not deleted here.
+      await this.git.git(["worktree", "remove", "--force", worktreePath]);
+    } catch {
+      // The worktree dir is already gone (e.g. a prior partial reclaim) — drop git's
+      // now-stale registration instead of failing, so removal is idempotent.
+      await this.git.git(["worktree", "prune"]);
+    }
+    // Remove the parent task dir too. `git worktree remove` only deletes the
+    // `worktree/` subdir; without this, gc's discovery would rediscover the empty
+    // task_<id> dir every run, re-orphan it, and exit 1 forever. force:true makes
+    // this a no-op when the dir is already absent (second remove).
+    rmSync(this.paths.taskDir(taskId), { recursive: true, force: true });
   }
 
   async list(): Promise<string[]> {

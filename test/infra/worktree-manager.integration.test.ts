@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { GitWorktreeManager } from "../../src/infra/worktree-manager.ts";
@@ -65,4 +65,24 @@ test("getDiff includes newly created (untracked) files", async () => {
   expect(diff).toContain("brand new content");
 
   await mgr.remove("task_newfile1");
+});
+
+test("remove is idempotent and cleans the task dir (gc can run twice without error)", async () => {
+  const paths = resolvePaths(groveRoot);
+  const git = new GitRunner(new BunCommandRunner(), repo);
+  const mgr = new GitWorktreeManager(git, paths);
+
+  const wt = await mgr.create("task_twice1", "Twice");
+  expect(existsSync(wt.worktreePath)).toBe(true);
+
+  await mgr.remove("task_twice1");
+  // both the worktree AND its parent task dir must be gone, so gc discovery
+  // won't rediscover an empty task_ dir and re-orphan it.
+  expect(existsSync(wt.worktreePath)).toBe(false);
+  expect(existsSync(paths.taskDir("task_twice1"))).toBe(false);
+
+  // second remove must NOT throw — this is the exact idempotency bug that made
+  // `grove gc` exit 1 on every run after the first reclamation.
+  await mgr.remove("task_twice1");
+  expect(existsSync(paths.taskDir("task_twice1"))).toBe(false);
 });
