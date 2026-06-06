@@ -15,6 +15,7 @@ import type {
 interface TaskRow {
   id: string;
   title: string;
+  description: string | null;
   kind: string;
   status: string;
   current_phase: string;
@@ -30,6 +31,7 @@ function mapTask(r: TaskRow): Task {
   return {
     id: r.id,
     title: r.title,
+    description: r.description,
     kind: r.kind as Task["kind"],
     status: r.status as Task["status"],
     currentPhase: r.current_phase as Task["currentPhase"],
@@ -91,12 +93,13 @@ export class SqliteStore implements Store {
     this.db
       .query(
         `INSERT INTO tasks
-         (id, title, kind, status, current_phase, repo_path, worktree_path, branch, compose_project, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         (id, title, description, kind, status, current_phase, repo_path, worktree_path, branch, compose_project, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
         input.title,
+        input.description ?? null,
         input.kind,
         input.status ?? "running",
         input.currentPhase ?? "brainstorm",

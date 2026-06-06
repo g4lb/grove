@@ -85,6 +85,7 @@ export class TaskEngine {
   async startTask(input: StartTaskInput): Promise<Task> {
     const task = this.store.createTask({
       title: input.title,
+      description: input.description,
       kind: input.kind,
       repoPath: input.repoPath,
     });
@@ -95,7 +96,7 @@ export class TaskEngine {
       composeProject: result.composeStarted ? `grove-${task.id}` : null,
     });
     this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
-    return this.runFrom(task.id, "brainstorm", input.description);
+    return this.runFrom(task.id, "brainstorm");
   }
 
   async confirmGate(taskId: string, decision: GateDecision): Promise<Task> {
@@ -107,7 +108,7 @@ export class TaskEngine {
 
     if (decision.kind === "rerun") {
       // Re-run the current phase ("request changes" with feedback, or "retry" without).
-      return this.runFrom(taskId, task.currentPhase, undefined, decision.feedback);
+      return this.runFrom(taskId, task.currentPhase, decision.feedback);
     }
 
     // approve
@@ -130,7 +131,6 @@ export class TaskEngine {
   protected async runFrom(
     taskId: string,
     start: Phase,
-    description?: string,
     feedback?: string,
   ): Promise<Task> {
     let phase: Phase | null = start;
@@ -141,7 +141,7 @@ export class TaskEngine {
       const run = this.store.createPhaseRun({ taskId, phase, state: "running" });
       this.store.updatePhaseRun(run.id, { startedAt: this.now() });
 
-      const ctx = this.buildContext(task, phase, description, firstPhase ? feedback : undefined);
+      const ctx = this.buildContext(task, phase, firstPhase ? feedback : undefined);
       let result: PhaseResult;
       try {
         result = await this.runPhase(taskId, phase, ctx, run.id);
@@ -209,11 +209,11 @@ export class TaskEngine {
     return result;
   }
 
-  private buildContext(task: Task, phase: Phase, description: string | undefined, feedback: string | undefined): PhaseContext {
+  private buildContext(task: Task, phase: Phase, feedback: string | undefined): PhaseContext {
     return {
       taskId: task.id,
       title: task.title,
-      description,
+      description: task.description ?? undefined,
       worktreePath: task.worktreePath ?? "",
       model: this.model,
       priorArtifacts: this.priorArtifacts(task.id, phase),

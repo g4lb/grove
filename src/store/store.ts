@@ -10,6 +10,7 @@ import type {
 
 export interface CreateTaskInput {
   title: string;
+  description?: string;
   kind: TaskKind;
   repoPath: string;
   status?: TaskStatus; // default "running"
