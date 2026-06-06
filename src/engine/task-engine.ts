@@ -1,8 +1,9 @@
 import type { Store } from "../store/store.ts";
 import type { Task, TaskKind, Phase } from "../domain/types.ts";
 import type { AgentRunner } from "../agent/agent-runner.ts";
-import type { AgentEvent } from "../agent/events.ts";
+import type { AgentEvent, PhaseContext, PhaseResult } from "../agent/events.ts";
 import type { TaskInfra } from "./task-infra.ts";
+import { PHASES, isGateAfter, isTerminalPhase, nextPhase } from "./phase-sequence.ts";
 
 export interface StartTaskInput {
   title: string;
@@ -72,5 +73,104 @@ export class TaskEngine {
     const task = this.store.getTask(taskId);
     if (!task) throw new Error(`task not found: ${taskId}`);
     return task;
+  }
+
+  async startTask(input: StartTaskInput): Promise<Task> {
+    const task = this.store.createTask({
+      title: input.title,
+      kind: input.kind,
+      repoPath: input.repoPath,
+    });
+    const result = await this.infra.provision(task.id, input.title);
+    this.store.updateTask(task.id, {
+      worktreePath: result.worktree.worktreePath,
+      branch: result.worktree.branch,
+      composeProject: result.composeStarted ? `grove-${task.id}` : null,
+    });
+    this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
+    return this.runFrom(task.id, "brainstorm", input.description);
+  }
+
+  /** Run phases from `start` forward, persisting, until a gate / terminal / failure. */
+  protected async runFrom(
+    taskId: string,
+    start: Phase,
+    description?: string,
+    feedback?: string,
+  ): Promise<Task> {
+    let phase: Phase | null = start;
+    let firstPhase = true;
+    while (phase) {
+      const task = this.requireTask(taskId);
+      this.store.updateTask(taskId, { status: "running", currentPhase: phase });
+      const run = this.store.createPhaseRun({ taskId, phase, state: "running" });
+
+      const ctx = this.buildContext(task, phase, description, firstPhase ? feedback : undefined);
+      const result = await this.runPhase(taskId, phase, ctx, run.id);
+
+      if (!result.success) {
+        this.store.updateTask(taskId, { status: "blocked", currentPhase: phase });
+        return this.requireTask(taskId);
+      }
+
+      if (isTerminalPhase(phase)) {
+        const t = this.requireTask(taskId);
+        if (t.worktreePath) await this.infra.teardown(taskId, t.worktreePath);
+        this.store.updateTask(taskId, { status: "done", currentPhase: phase });
+        return this.requireTask(taskId);
+      }
+
+      if (isGateAfter(phase)) {
+        this.store.updateTask(taskId, { status: "waiting_confirm", currentPhase: phase });
+        return this.requireTask(taskId);
+      }
+
+      phase = nextPhase(phase);
+      firstPhase = false;
+    }
+    return this.requireTask(taskId);
+  }
+
+  private async runPhase(taskId: string, phase: Phase, ctx: PhaseContext, runId: string): Promise<PhaseResult> {
+    const gen = this.agent.run(phase, ctx);
+    let next = await gen.next();
+    while (!next.done) {
+      const event = next.value;
+      this.store.appendEvent({ taskId, type: `agent:${event.type}`, payload: event });
+      this.emit(taskId, event);
+      next = await gen.next();
+    }
+    const result = next.value;
+    this.store.updatePhaseRun(runId, {
+      state: result.success ? "succeeded" : "failed",
+      summary: result.summary,
+      artifactPath: result.artifactPath,
+      endedAt: this.now(),
+    });
+    return result;
+  }
+
+  private buildContext(task: Task, phase: Phase, description: string | undefined, feedback: string | undefined): PhaseContext {
+    return {
+      taskId: task.id,
+      title: task.title,
+      description,
+      worktreePath: task.worktreePath ?? "",
+      model: this.model,
+      priorArtifacts: this.priorArtifacts(task.id, phase),
+      feedback,
+    };
+  }
+
+  /** Artifacts of earlier succeeded phases (reconstructed from the store, so resume works). */
+  private priorArtifacts(taskId: string, phase: Phase): Array<{ phase: Phase; path: string }> {
+    const idx = PHASES.indexOf(phase);
+    const out: Array<{ phase: Phase; path: string }> = [];
+    for (const r of this.store.getPhaseRuns(taskId)) {
+      if (r.state === "succeeded" && r.artifactPath && PHASES.indexOf(r.phase) < idx) {
+        out.push({ phase: r.phase, path: r.artifactPath });
+      }
+    }
+    return out;
   }
 }
