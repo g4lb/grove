@@ -2,7 +2,9 @@
   "name": "grove",
   "version": "0.0.1",
   "type": "module",
-  "bin": { "grove": "./src/cli/index.ts" },
+  "bin": {
+    "grove": "./src/cli/index.ts"
+  },
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
@@ -11,5 +13,8 @@
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.167"
   }
 }
