@@ -8,14 +8,31 @@
 
 `grove` is a standalone, cross-platform CLI that orchestrates AI-driven software
 development inside isolated environments. A user installs it (`brew` / `curl`),
-runs `init`, and is presented with a menu:
+runs `init`, and lands in a **free-text prompt** (a Claude-Code-style REPL).
+The user describes what they want in plain language — there is **no menu of
+modes to pick from**. grove infers the right workflow ("superpowers-style") and
+runs it.
 
-1. **Start task** — runs a checkpoint-gated development workflow:
-   brainstorm → plan → execute → code review → finish branch.
-2. **Debug issue** — investigation/reproduction-driven debugging flow.
-   *(Deferred to v1.1; shown as "coming soon" in the v1 menu.)*
-3. **List** — dashboard of all tasks/issues and their status
-   (running / waiting for confirm / blocked / done / stopped).
+- **Type prose to start work.** A fast **intent router** classifies the request
+  as a `task` (build something) or a `debug` (investigate/fix a problem) and
+  starts the matching checkpoint-gated workflow. The user never picks the kind;
+  the detected kind is **confirmed at the first gate**, where it can be
+  redirected if the router guessed wrong.
+- **Commands/keys for navigation** (not prose): `/list` (or a hotkey) opens the
+  task dashboard; `/open <id>` (or selecting from the list) jumps into a task.
+  Keeping navigation as explicit commands means the router only ever has to
+  classify *work* requests, never disambiguate work-vs-navigation.
+
+Workflows:
+
+- **task** — checkpoint-gated build flow:
+  brainstorm → plan → execute → code review → finish branch.
+- **debug** — investigation/reproduction-driven fix flow.
+  *(Deferred to v1.1. In v1 a detected `debug` surfaces a "debugging coming in
+  v1.1 — treat as a task?" note rather than running a debug flow.)*
+
+The **list dashboard** (running / waiting for confirm / blocked / done /
+stopped), reached via `/list`, tags each item with its router-detected kind.
 
 Each task runs in an isolated environment built from three layers:
 
@@ -34,6 +51,7 @@ superpowers-style workflow skills bundled into the binary.
 | Language/runtime | **TypeScript on Bun**, compiled to a single binary | Fast startup, cross-platform standalone binaries, self-contained (no Node prerequisite), native Agent SDK. |
 | Distribution | **brew tap + `curl \| sh` installer** | One self-contained binary. Requires `git`, `docker`, `docker compose` present on host (checked by `doctor`). |
 | UI | **Ink** (React-for-terminals) | Mature TUI; control plane over the engine. |
+| Entry model | **Free-text prompt + intent router** (no mode menu) | User describes work in prose; a router classifies `task`/`debug` and runs the right workflow. Navigation stays as explicit `/list`/`/open` commands so the router only classifies work requests. Detected kind confirmed at the first gate. |
 | Packaging | **Standalone app**, not a Claude Code plugin | Plugin can't host a top-level menu, a cross-task dashboard, many concurrent isolated environments, or become a GUI app / self-contained binary. |
 | v1 isolation | **Worktree + Docker Compose per task** | Real code + service isolation; sandbox layer deferred but designed-for. |
 | Human-in-loop | **Checkpoint-gated**: gates after brainstorm, after plan, before finish/merge | Predictable, trustworthy; matches `waiting_confirm` status. |
@@ -46,7 +64,11 @@ concrete implementations:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  TUI (Ink)  — menu, list dashboard, gate prompts │   control plane
+│  TUI (Ink) — free-text prompt, list dashboard,   │   control plane
+│  gate prompts (/list, /open commands)            │
+├─────────────────────────────────────────────────┤
+│  Router — classifies a prose request →           │   intake
+│  { kind: task|debug } (fast structured LLM call) │
 ├─────────────────────────────────────────────────┤
 │  Task Engine — lifecycle state machine, gates    │   orchestration
 ├─────────────────────────────────────────────────┤
@@ -59,6 +81,11 @@ concrete implementations:
                      │
               Store (SQLite adapter)
 ```
+
+The **Router** sits between the prompt and the engine: prose in, a structured
+`{ kind, confidence, reasoning }` out. The engine then starts the workflow for
+that kind. The router classifies *work requests only* — navigation is handled by
+explicit commands in the TUI, never routed.
 
 **Critical boundary:** the Task Engine exposes a clean async interface
 (`startTask`, `advance`, `confirmGate`, `getStatus`, `subscribe(events)`) and
@@ -153,6 +180,24 @@ wrapper, so logic is mockable without real git/docker.
 
 ## 6. Agent Runtime
 
+### 6.0 Router (intake)
+
+Before any workflow runs, the prose request goes through the **Router** — a
+single fast, cheap **structured LLM call** (haiku-class) that returns
+`{ kind: "task" | "debug", confidence, reasoning }`. It is *not* a full agent
+loop; it is one classification call so the front door stays snappy.
+
+- The router picks its **best guess** — no up-front clarifying question. The
+  first-gate confirmation (§7) is the correction point, keeping intake instant.
+- It classifies **work requests only**. Navigation (`/list`, `/open`) is handled
+  by the TUI as explicit commands and never reaches the router.
+- The chosen `kind` is written to `task.kind`; the engine selects the matching
+  workflow definition. Behind an interface (`Router.classify(prompt)`) like every
+  other boundary, so it's mockable and swappable.
+- **v1:** only the `task` workflow is wired. A `debug` classification surfaces a
+  "debugging coming in v1.1 — treat as a task?" prompt instead of running a debug
+  flow.
+
 ### 6.1 One agent session per phase
 
 Each phase is a bounded agent run: phase-specific system prompt, relevant skill
@@ -192,42 +237,62 @@ explicitly as a known v1 limitation.
 
 ## 7. TUI & UX (Ink)
 
-### 7.1 Main menu
+### 7.1 Home — free-text prompt (REPL)
 
 ```
   grove
 
-  ❯ 1. Start task      begin a new development workflow
-    2. Debug issue     (coming in v1.1)
-    3. List            view all tasks & their status
-    q. Quit
+  › what do you want to work on?
+  ▸ _
 
+  /list  view tasks   ·   /open <id>  resume a task   ·   /help
   hint: run `grove doctor` to check your environment
-
 ```
 
-### 7.2 Start task flow
+The user types a request in prose and submits. There is **no mode menu**.
+Commands (prefixed `/`) handle navigation; anything else is treated as a work
+request and sent to the router.
 
-Prompt for a one-line description → engine creates task (provision worktree +
-compose) → attach to live agent feed for `brainstorm` → at gate, show design doc
-+ **[a]pprove / [r]equest changes / [s]top**.
+### 7.2 Start-work flow
 
-### 7.3 List dashboard
+Submit prose → **Router** classifies `{ kind }` → engine creates the task
+(`task.kind` = detected kind; provision worktree + compose) → attach to the live
+agent feed for the first phase (`brainstorm` for a task).
+
+**First-gate confirmation.** At the first gate the task view shows the artifact
+**plus the detected kind**, e.g.:
+
+```
+  Detected: task  (router: "feature request — adds OAuth login")     [↹ change kind]
+
+  <design doc preview …>
+
+  [a]pprove   [r]equest changes   [c]hange kind   [s]top
+```
+
+`change kind` lets the user redirect if the router guessed wrong (e.g. reroute a
+mis-detected task to the debug flow). Approve advances as normal.
+
+### 7.3 List dashboard (`/list`)
+
+Reached with the `/list` command (or a hotkey) from the home prompt — not a menu
+item. Each row is tagged with its router-detected **KIND**.
 
 ```
   Tasks
 
-  STATUS            TASK                       PHASE     UPDATED
-  ● running         add OAuth login            execute   12s ago
-  ⏸ waiting_confirm refactor billing module    plan      4m ago
-  ⛔ blocked         fix flaky checkout test     review    1h ago
-  ✓ done            upgrade to React 19        finish    2d ago
+  STATUS            KIND   TASK                       PHASE     UPDATED
+  ● running         task   add OAuth login            execute   12s ago
+  ⏸ waiting_confirm task   refactor billing module    plan      4m ago
+  ⛔ blocked         debug  fix flaky checkout test     review    1h ago
+  ✓ done            task   upgrade to React 19        finish    2d ago
 
-  ↑↓ select · enter: open · s: stop
+  ↑↓ select · enter: open · s: stop · esc: back to prompt
 ```
 
-Selecting a task opens the **task view**: live feed if running; gate artifact +
-actions if `waiting_confirm`; error + retry if `blocked`.
+Selecting a task (or `/open <id>` from the prompt) opens the **task view**: live
+feed if running; gate artifact + actions if `waiting_confirm`; error + retry if
+`blocked`.
 
 ### 7.4 Gate interaction
 
@@ -299,8 +364,11 @@ The engine consults `DiskMonitor` at provisioning gates.
 - **Adapter tests:** `SqliteStore` against a temp DB; `WorktreeManager` /
   `ComposeManager` against the typed git/docker wrapper (mocked for logic + a
   small set of real-git/real-docker integration tests behind a flag).
-- **TUI:** `ink-testing-library` for menu nav, list rendering, gate actions,
-  driven by a fake engine.
+- **Router:** `Router.classify` tested with a mocked LLM call — prose fixtures
+  asserting `task` vs `debug` classification, plus low-confidence handling.
+- **TUI:** `ink-testing-library` for the free-text prompt, `/list`/`/open`
+  command handling, list rendering, first-gate kind-confirmation, and gate
+  actions, driven by a fake engine + fake router.
 - **E2E smoke:** one real "start task → gate → approve → finish" run against a
   tiny throwaway repo, in CI with Docker available.
 
@@ -311,13 +379,15 @@ TDD throughout (failing test first), per the methodology the tool embodies.
 | In v1 | Deferred (designed-for) |
 |---|---|
 | `init` + `doctor` preflight | Agent-in-sandbox execution |
-| **Start task** workflow w/ 3 gates | Concurrent background daemon |
-| **List** dashboard (live/saved status) | GUI app |
-| Worktree + Compose isolation per task | Per-phase auto/gate policy config |
-| Own-agent loop via Agent SDK + bundled skills | Multi-provider / model-agnostic |
-| `Store` (SQLite adapter) | Stronger-DB adapter (Postgres/Turso) |
-| `DiskMonitor` + guardrails + `grove gc` | Disk quotas |
-| Teardown on finish | **Debug issue** workflow (v1.1) |
+| **Free-text prompt + Router** (classifies kind) | Concurrent background daemon |
+| **task** workflow w/ 3 gates + first-gate kind confirmation | GUI app |
+| `/list` dashboard (live/saved status, KIND column) | Per-phase auto/gate policy config |
+| `/open <id>` to resume a task | Multi-provider / model-agnostic |
+| Worktree + Compose isolation per task | Stronger-DB adapter (Postgres/Turso) |
+| Own-agent loop via Agent SDK + bundled skills | Disk quotas |
+| `Store` (SQLite adapter) | **debug** workflow (v1.1; v1 shows "treat as task?") |
+| `DiskMonitor` + guardrails + `grove gc` | |
+| Teardown on finish | |
 
 ## 12. Open Questions / Future
 
