@@ -132,9 +132,24 @@ export class TaskEngine {
       const task = this.requireTask(taskId);
       this.store.updateTask(taskId, { status: "running", currentPhase: phase });
       const run = this.store.createPhaseRun({ taskId, phase, state: "running" });
+      this.store.updatePhaseRun(run.id, { startedAt: this.now() });
 
       const ctx = this.buildContext(task, phase, description, firstPhase ? feedback : undefined);
-      const result = await this.runPhase(taskId, phase, ctx, run.id);
+      let result: PhaseResult;
+      try {
+        result = await this.runPhase(taskId, phase, ctx, run.id);
+      } catch (err) {
+        // A thrown agent error (vs a success:false return) must not escape and leave the
+        // phase_run/task stuck in "running" — mark it failed + blocked, preserving the
+        // persist-before-return invariant.
+        this.store.updatePhaseRun(run.id, {
+          state: "failed",
+          summary: `phase ${phase} crashed: ${err instanceof Error ? err.message : String(err)}`,
+          endedAt: this.now(),
+        });
+        this.store.updateTask(taskId, { status: "blocked", currentPhase: phase });
+        return this.requireTask(taskId);
+      }
 
       if (!result.success) {
         this.store.updateTask(taskId, { status: "blocked", currentPhase: phase });
