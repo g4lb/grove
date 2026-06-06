@@ -14,6 +14,7 @@ export type PhaseState = "pending" | "running" | "succeeded" | "failed";
 export interface Task {
   id: string;
   title: string;
+  description: string | null;
   kind: TaskKind;
   status: TaskStatus;
   currentPhase: Phase;

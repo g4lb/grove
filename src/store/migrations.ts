@@ -5,6 +5,7 @@ export function migrate(db: Database): void {
     CREATE TABLE IF NOT EXISTS tasks (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
+      description TEXT,
       kind TEXT NOT NULL,
       status TEXT NOT NULL,
       current_phase TEXT NOT NULL,
