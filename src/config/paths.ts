@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export interface GrovePaths {
   root: string;
@@ -9,7 +9,8 @@ export interface GrovePaths {
   taskDir(id: string): string;
 }
 
-export function resolvePaths(root: string = join(homedir(), ".grove")): GrovePaths {
+export function resolvePaths(rootInput: string = join(homedir(), ".grove")): GrovePaths {
+  const root = resolve(rootInput);
   return {
     root,
     dbFile: join(root, "grove.db"),
