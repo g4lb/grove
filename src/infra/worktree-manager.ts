@@ -60,8 +60,11 @@ export class GitWorktreeManager implements WorktreeManager {
 
   async getDiff(taskId: string): Promise<string> {
     const worktreePath = this.worktreePathFor(taskId);
-    // GitRunner already injects `-C <repoPath>`; this second absolute `-C <worktreePath>`
-    // overrides it so the diff runs in the task's worktree (absolute path is required).
+    // GitRunner already injects `-C <repoPath>`; the second absolute `-C <worktreePath>`
+    // overrides it so git operates in the task's worktree (absolute path is required).
+    // `add -A -N` marks new files as intent-to-add so they appear as additions in the
+    // diff — without it, `git diff HEAD` would silently omit untracked files.
+    await this.git.git(["-C", worktreePath, "add", "-A", "-N"]);
     const res = await this.git.git(["-C", worktreePath, "diff", "HEAD"]);
     return res;
   }

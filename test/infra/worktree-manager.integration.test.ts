@@ -50,3 +50,19 @@ test("create → list → getDiff → remove against real git", async () => {
   const after = await mgr.list();
   expect(after.some((p) => p.endsWith("/task_abcd1234/worktree"))).toBe(false);
 });
+
+test("getDiff includes newly created (untracked) files", async () => {
+  const paths = resolvePaths(groveRoot);
+  const git = new GitRunner(new BunCommandRunner(), repo);
+  const mgr = new GitWorktreeManager(git, paths);
+
+  const wt = await mgr.create("task_newfile1", "New File");
+  // create a brand-new, untracked file in the worktree
+  writeFileSync(join(wt.worktreePath, "NEWFILE.txt"), "brand new content\n");
+
+  const diff = await mgr.getDiff("task_newfile1");
+  expect(diff).toContain("NEWFILE.txt");
+  expect(diff).toContain("brand new content");
+
+  await mgr.remove("task_newfile1");
+});
