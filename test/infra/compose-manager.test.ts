@@ -82,3 +82,58 @@ test("down() is a no-op returning false when the worktree has no compose file", 
     rmSync(wt, { recursive: true, force: true });
   }
 });
+
+test("status() returns ps output and no-op '' when no compose file", async () => {
+  const wt = worktreeWithCompose();
+  const empty = mkdtempSync(join(tmpdir(), "grove-wt-"));
+  try {
+    const runner = new ScriptedRunner({ code: 0, stdout: "NAME  STATE\nweb  running\n", stderr: "" });
+    const mgr = new DockerComposeManager(new DockerRunner(runner));
+    const out = await mgr.status("task_abc123", wt);
+    expect(out).toContain("web");
+    expect(runner.calls[0]).toContain("ps");
+
+    const emptyRunner = new ScriptedRunner();
+    const emptyMgr = new DockerComposeManager(new DockerRunner(emptyRunner));
+    expect(await emptyMgr.status("task_abc123", empty)).toBe("");
+    expect(emptyRunner.calls.length).toBe(0);
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test("logs() returns logs output and passes --no-color", async () => {
+  const wt = worktreeWithCompose();
+  try {
+    const runner = new ScriptedRunner({ code: 0, stdout: "web | started\n", stderr: "" });
+    const mgr = new DockerComposeManager(new DockerRunner(runner));
+    const out = await mgr.logs("task_abc123", wt);
+    expect(out).toContain("started");
+    expect(runner.calls[0]).toContain("logs");
+    expect(runner.calls[0]).toContain("--no-color");
+  } finally {
+    rmSync(wt, { recursive: true, force: true });
+  }
+});
+
+test("downByProject() runs compose down by project name without -f; returns true on success", async () => {
+  const runner = new ScriptedRunner();
+  const mgr = new DockerComposeManager(new DockerRunner(runner));
+  const ok = await mgr.downByProject("grove-task_gone");
+  expect(ok).toBe(true);
+  expect(runner.calls[0]).toEqual([
+    "compose",
+    "-p",
+    "grove-task_gone",
+    "down",
+    "--volumes",
+    "--remove-orphans",
+  ]);
+});
+
+test("downByProject() returns false (not throw) when the project is unknown", async () => {
+  const runner = new ScriptedRunner({ code: 1, stdout: "", stderr: "no configuration file" });
+  const mgr = new DockerComposeManager(new DockerRunner(runner));
+  expect(await mgr.downByProject("grove-task_gone")).toBe(false);
+});
