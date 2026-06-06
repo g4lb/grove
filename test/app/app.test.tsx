@@ -10,12 +10,16 @@ function spyController(view: ControllerView) {
     view,
     onChange: () => {},
     starts: [] as string[],
+    submits: [] as string[],
     decisions: [] as GateDecision[],
     snapshot() {
       return this.view;
     },
     async start(prose: string) {
       this.starts.push(prose);
+    },
+    async submit(s: string) {
+      this.submits.push(s);
     },
     async decide(d: GateDecision) {
       this.decisions.push(d);
@@ -35,13 +39,13 @@ test("renders the grove prompt in the idle state", () => {
   expect(lastFrame()).toContain("grove");
 });
 
-test("typing a request and pressing enter calls controller.start", async () => {
+test("typing a request and pressing enter calls controller.submit", async () => {
   const c = spyController(idle);
   const { stdin } = render(<App controller={c as any} />);
   stdin.write("add a settings page");
   stdin.write("\r");
   await delay();
-  expect(c.starts).toContain("add a settings page");
+  expect(c.submits).toContain("add a settings page");
 });
 
 test("renders the feed and the gate action bar at a gate", () => {

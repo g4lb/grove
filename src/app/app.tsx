@@ -3,7 +3,10 @@ import { Box, Text, useInput, useApp } from "ink";
 import type { TaskRunController } from "./controller.ts";
 
 export interface AppProps {
-  controller: Pick<TaskRunController, "snapshot" | "start" | "decide"> & { onChange: () => void };
+  controller: Pick<
+    TaskRunController,
+    "snapshot" | "start" | "decide" | "submit" | "selectUp" | "selectDown" | "openSelected" | "backToPrompt"
+  > & { onChange: () => void };
 }
 
 export function App({ controller }: AppProps): React.ReactElement {
@@ -31,6 +34,13 @@ export function App({ controller }: AppProps): React.ReactElement {
   const terminal = view.state === "done" || view.state === "blocked" || view.state === "stopped";
 
   useInput((char, key) => {
+    if (view.mode === "list") {
+      if (key.upArrow) controller.selectUp();
+      else if (key.downArrow) controller.selectDown();
+      else if (key.return || char === "o") controller.openSelected();
+      else if (key.escape) controller.backToPrompt();
+      return;
+    }
     if (terminal) {
       if (char === "q" || key.return || (key.ctrl && char === "c")) exit();
       return;
@@ -40,7 +50,7 @@ export function App({ controller }: AppProps): React.ReactElement {
         const prose = inputRef.current.trim();
         if (prose.length > 0) {
           updateInput("");
-          void controller.start(prose);
+          void controller.submit(prose);
         }
       } else if (key.backspace || key.delete) {
         updateInput(inputRef.current.slice(0, -1));
@@ -68,6 +78,22 @@ export function App({ controller }: AppProps): React.ReactElement {
       }
     }
   });
+
+  if (view.mode === "list") {
+    return (
+      <Box flexDirection="column">
+        <Text color="green">grove — tasks</Text>
+        {view.tasks.length === 0 && <Text dimColor>no tasks yet</Text>}
+        {view.tasks.map((t, i) => (
+          <Text key={t.id} color={i === view.selected ? "cyan" : undefined}>
+            {i === view.selected ? "› " : "  "}
+            {t.status.padEnd(15)} {t.kind.padEnd(6)} {t.currentPhase.padEnd(10)} {t.title}
+          </Text>
+        ))}
+        <Text dimColor>↑/↓ select · enter/o open · esc back</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">
