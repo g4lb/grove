@@ -49,6 +49,11 @@ export class TaskEngine {
     return this.store.getTask(taskId);
   }
 
+  /** All tasks, for the TUI/CLI list view. */
+  listTasks(): Task[] {
+    return this.store.queryTasks();
+  }
+
   getEvents(taskId: string) {
     return this.store.getEvents(taskId);
   }
