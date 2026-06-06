@@ -41,3 +41,22 @@ test("phase runs record startedAt", async () => {
   const runs = store.getPhaseRuns(t.id);
   expect(runs[0]!.startedAt).toBe("2026-06-06T00:00:00.000Z");
 });
+
+test("a throwing subscriber does not block the task — the phase still completes normally", async () => {
+  const { engine } = buildEngine({ brainstorm: ok("brainstorm", "/wt/.grove/design.md", [{ type: "token", text: "hi" }]) });
+  // register a subscriber that throws on every event
+  let taskId = "";
+  // we need the id before events fire; subscribe to all by registering on the id after createTask is internal.
+  // Instead, subscribe broadly: the engine emits per-taskId, so subscribe using a side channel —
+  // simplest: start the task, which emits during the awaited call, but we can't subscribe before the id exists.
+  // So assert the inverse: a subscriber added for a known id that throws is isolated. Use a 2-step flow:
+  const t0 = await engine.startTask({ title: "x", repoPath: "/r", kind: "task" }); // brainstorm gate
+  taskId = t0.id;
+  let threw = false;
+  engine.subscribe(taskId, () => { threw = true; throw new Error("bad subscriber"); });
+  // rerun emits events again; a throwing subscriber must NOT block the task
+  const t1 = await engine.confirmGate(taskId, { kind: "rerun" });
+  expect(threw).toBe(true);
+  expect(t1.status).toBe("waiting_confirm"); // not blocked
+  expect(t1.currentPhase).toBe("brainstorm");
+});

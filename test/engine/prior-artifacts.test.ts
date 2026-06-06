@@ -44,3 +44,22 @@ test("each phase sees earlier succeeded phases' artifacts as priorArtifacts", as
   expect(byPhase("execute")).toEqual(["/wt/.grove/design.md", "/wt/.grove/plan.md"]);
   expect(byPhase("finish")).toEqual(["/wt/.grove/design.md", "/wt/.grove/plan.md", "/wt/.grove/review.md"]);
 });
+
+test("priorArtifacts does not duplicate a phase's artifact after a rerun", async () => {
+  const store = SqliteStore.open(":memory:", { now: () => "t" });
+  const agent = new SpyRunner({
+    brainstorm: "/wt/.grove/design.md",
+    plan: "/wt/.grove/plan.md",
+    execute: null,
+    review: "/wt/.grove/review.md",
+    finish: null,
+  });
+  const engine = new TaskEngine({ store, agent, infra: new FakeTaskInfra(), model: "m", now: () => "t" });
+
+  const t0 = await engine.startTask({ title: "x", repoPath: "/r", kind: "task" }); // brainstorm gate
+  await engine.confirmGate(t0.id, { kind: "rerun", feedback: "again" }); // re-run brainstorm (2nd succeeded run)
+  await engine.confirmGate(t0.id, { kind: "approve" }); // plan
+
+  const planCtx = agent.contexts.filter((c) => c.phase === "plan").pop()!;
+  expect(planCtx.priorArtifacts.map((a) => a.path)).toEqual(["/wt/.grove/design.md"]);
+});

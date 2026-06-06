@@ -66,7 +66,14 @@ export class TaskEngine {
 
   protected emit(taskId: string, event: AgentEvent): void {
     const set = this.subscribers.get(taskId);
-    if (set) for (const h of set) h(event);
+    if (!set) return;
+    for (const h of set) {
+      try {
+        h(event);
+      } catch {
+        // A buggy subscriber must not abort the phase or corrupt task state.
+      }
+    }
   }
 
   protected requireTask(taskId: string): Task {
@@ -208,11 +215,18 @@ export class TaskEngine {
   /** Artifacts of earlier succeeded phases (reconstructed from the store, so resume works). */
   private priorArtifacts(taskId: string, phase: Phase): Array<{ phase: Phase; path: string }> {
     const idx = PHASES.indexOf(phase);
-    const out: Array<{ phase: Phase; path: string }> = [];
+    // Keep only the latest succeeded run per phase — a rerun/resume creates extra
+    // phase_run rows for the same phase. getPhaseRuns is rowid-ordered, so last write wins.
+    const latest = new Map<Phase, string>();
     for (const r of this.store.getPhaseRuns(taskId)) {
       if (r.state === "succeeded" && r.artifactPath && PHASES.indexOf(r.phase) < idx) {
-        out.push({ phase: r.phase, path: r.artifactPath });
+        latest.set(r.phase, r.artifactPath);
       }
+    }
+    const out: Array<{ phase: Phase; path: string }> = [];
+    for (const p of PHASES) {
+      const path = latest.get(p);
+      if (path !== undefined) out.push({ phase: p, path });
     }
     return out;
   }
