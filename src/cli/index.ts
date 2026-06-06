@@ -55,6 +55,7 @@ async function launchTui(): Promise<number> {
   const agent = new SdkAgentRunner({ env: process.env });
   const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
   const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
+  controller.setLister(() => engine.listTasks());
 
   try {
     const { waitUntilExit } = render(React.createElement(App, { controller }));
