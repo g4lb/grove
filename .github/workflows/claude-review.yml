@@ -1,0 +1,40 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Code Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          # Auth — pick ONE. OAuth token (from `claude setup-token`) ties usage
+          # to your Claude subscription; the API key bills the Anthropic API.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          use_sticky_comment: true
+          prompt: |
+            Review this pull request for correctness, security
+            vulnerabilities, broken edge cases, and regressions.
+            Focus on bugs that would break production, not style
+            preferences. Post findings as inline comments on the specific
+            lines, tagged by severity. If there are no significant issues,
+            say so briefly.
+          claude_args: |
+            --max-turns 15
+            --model claude-opus-4-8
