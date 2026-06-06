@@ -21,6 +21,10 @@ import { HeuristicRouter } from "../engine/router.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
 import { runTask } from "./run-driver.ts";
 import { stdinGateDecider } from "./gate-prompt.ts";
+import React from "react";
+import { render } from "ink";
+import { App } from "../app/app.tsx";
+import { TaskRunController } from "../app/controller.ts";
 
 const VERSION = "0.0.1";
 
@@ -33,9 +37,39 @@ function grovePaths() {
   return resolvePaths(root);
 }
 
+async function launchTui(): Promise<number> {
+  const paths = grovePaths();
+  mkdirSync(paths.tasksDir, { recursive: true });
+  if (!detectCredentials(process.env).present) {
+    console.log("no Anthropic credential — set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
+    return 1;
+  }
+  const runner = new BunCommandRunner();
+  const repoPath = process.cwd();
+  const config = await loadConfig(paths);
+  const store = SqliteStore.open(paths.dbFile);
+  const git = new GitRunner(runner, repoPath);
+  const worktrees = new GitWorktreeManager(git, paths);
+  const compose = new DockerComposeManager(new DockerRunner(runner));
+  const infra = new InfraManager(worktrees, compose);
+  const agent = new SdkAgentRunner({ env: process.env });
+  const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
+  const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
+
+  try {
+    const { waitUntilExit } = render(React.createElement(App, { controller }));
+    await waitUntilExit();
+    return 0;
+  } finally {
+    store.close();
+  }
+}
+
 async function main(argv: string[]): Promise<number> {
   const cmd = argv[2];
   switch (cmd) {
+    case undefined:
+      return launchTui();
     case "-v":
     case "--version":
       console.log(VERSION);

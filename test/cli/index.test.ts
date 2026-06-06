@@ -23,8 +23,8 @@ test("doctor runs and exits (0 or 1) with per-dependency lines", async () => {
   expect(stdout).toContain("docker");
 });
 
-test("no args prints usage", async () => {
-  const { code, stdout } = await runCli([]);
+test("an unknown command prints usage", async () => {
+  const { code, stdout } = await runCli(["bogus-command"]);
   expect(code).toBe(0);
   expect(stdout.toLowerCase()).toContain("usage");
 });
