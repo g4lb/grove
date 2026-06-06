@@ -28,3 +28,16 @@ test("grove gc --yes runs and reports (no orphans on a fresh home)", async () =>
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("grove gc works against a never-initialized GROVE_HOME (creates the home)", async () => {
+  // A GROVE_HOME that does not exist at all — gc must create it (mkdir + db)
+  // before opening the store, so it works without a prior `grove init`.
+  const root = join(mkdtempSync(join(tmpdir(), "grove-")), "never-init", ".grove");
+  try {
+    const { code, stdout } = await runCli(["gc"], { GROVE_HOME: root });
+    expect(code).toBe(0);
+    expect(stdout.toLowerCase()).toMatch(/nothing to reclaim|reclaimed 0|no orphans/);
+  } finally {
+    rmSync(join(root, "..", ".."), { recursive: true, force: true });
+  }
+});
