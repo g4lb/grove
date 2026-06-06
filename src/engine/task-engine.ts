@@ -165,8 +165,17 @@ export class TaskEngine {
 
       if (isTerminalPhase(phase)) {
         const t = this.requireTask(taskId);
-        if (t.worktreePath) await this.infra.teardown(taskId, t.worktreePath);
+        // Mark done first — the work is integrated, so a teardown failure must not leave
+        // the task stuck in "running". Teardown is best-effort cleanup; `grove gc` reclaims
+        // anything left behind.
         this.store.updateTask(taskId, { status: "done", currentPhase: phase });
+        if (t.worktreePath) {
+          try {
+            await this.infra.teardown(taskId, t.worktreePath);
+          } catch {
+            // best-effort
+          }
+        }
         return this.requireTask(taskId);
       }
 
