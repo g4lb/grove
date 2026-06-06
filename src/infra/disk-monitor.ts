@@ -10,6 +10,7 @@ export interface DiskThresholds {
 export interface DiskMonitor {
   freeBytes(path: string): Promise<number>;
   evaluate(freeBytes: number, thresholds: DiskThresholds): DiskVerdict;
+  groveUsageBytes(tasksDir: string): Promise<number>;
 }
 
 export class ShellDiskMonitor implements DiskMonitor {
@@ -34,5 +35,16 @@ export class ShellDiskMonitor implements DiskMonitor {
     if (freeBytes < thresholds.blockBytes) return "block";
     if (freeBytes < thresholds.warnBytes) return "warn";
     return "ok";
+  }
+
+  async groveUsageBytes(tasksDir: string): Promise<number> {
+    const res = await this.runner.run("du", ["-sk", tasksDir]);
+    if (res.code !== 0) {
+      // Directory missing / not yet created → no usage.
+      return 0;
+    }
+    const firstCol = res.stdout.trim().split(/\s+/)[0];
+    const kib = Number(firstCol);
+    return Number.isFinite(kib) ? kib * 1024 : 0;
   }
 }
