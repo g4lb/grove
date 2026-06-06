@@ -80,3 +80,19 @@ test("list-mode Esc returns to the prompt", async () => {
   await delay();
   expect(c.nav).toContain("back");
 });
+
+test("pressing enter on a terminal state returns to the prompt (so /list is reachable again)", async () => {
+  const c = spyController({ ...idle, state: "done", message: "task complete", task: task({}) });
+  const { stdin } = render(<App controller={c as any} />);
+  stdin.write("\r");
+  await delay();
+  expect(c.nav).toContain("back");
+});
+
+test("terminal-state hint mentions starting a new prompt and quitting", () => {
+  const c = spyController({ ...idle, state: "done", message: "task complete" });
+  const { lastFrame } = render(<App controller={c as any} />);
+  const frame = (lastFrame() ?? "").toLowerCase();
+  expect(frame).toContain("new prompt");
+  expect(frame).toContain("quit");
+});

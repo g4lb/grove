@@ -42,7 +42,8 @@ export function App({ controller }: AppProps): React.ReactElement {
       return;
     }
     if (terminal) {
-      if (char === "q" || key.return || (key.ctrl && char === "c")) exit();
+      if (key.return) controller.backToPrompt();
+      else if (char === "q" || (key.ctrl && char === "c")) exit();
       return;
     }
     if (view.state === "idle") {
@@ -109,7 +110,7 @@ export function App({ controller }: AppProps): React.ReactElement {
 
       {view.message.length > 0 && <Text>{view.message}</Text>}
 
-      {terminal && <Text dimColor>press q to quit</Text>}
+      {terminal && <Text dimColor>enter: new prompt · q: quit</Text>}
 
       {view.state === "running" && <Text dimColor>working…</Text>}
 
