@@ -136,3 +136,30 @@ test("start is a no-op while already running (guard covers the classify await)",
   await Promise.all([p1, p2]);
   expect(calls).toBe(1);
 });
+
+test("opening a task marks the view as 'viewing'", async () => {
+  const c = ctl([task({ id: "task_1", status: "running", currentPhase: "execute" })]);
+  await c.submit("/open task_1");
+  expect(c.snapshot().viewing).toBe(true);
+});
+
+test("backToPrompt clears viewing", async () => {
+  const c = ctl([task({ id: "task_1", status: "running" })]);
+  await c.submit("/open task_1");
+  c.backToPrompt();
+  expect(c.snapshot().viewing).toBe(false);
+});
+
+test("starting a fresh task is not in viewing mode", async () => {
+  const engine: ControllerEngine = {
+    async startTask() {
+      return task({ id: "task_1", status: "waiting_confirm", currentPhase: "brainstorm" });
+    },
+    async confirmGate() {
+      return task({});
+    },
+  };
+  const c = ctl([], engine);
+  await c.submit("add a page");
+  expect(c.snapshot().viewing).toBe(false);
+});

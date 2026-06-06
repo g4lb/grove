@@ -27,7 +27,7 @@ function spyController(view: ControllerView) {
   };
 }
 
-const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0 };
+const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
 
 function delay(ms = 30) {
   return new Promise((r) => setTimeout(r, ms));
@@ -57,6 +57,7 @@ test("renders the feed and the gate action bar at a gate", () => {
     message: "gate — brainstorm done",
     tasks: [],
     selected: 0,
+    viewing: false,
   });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
@@ -66,7 +67,7 @@ test("renders the feed and the gate action bar at a gate", () => {
 });
 
 test("pressing 'a' at a gate approves", async () => {
-  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0 });
+  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0, viewing: false });
   const { stdin } = render(<App controller={c as any} />);
   stdin.write("a");
   await delay();
@@ -74,7 +75,7 @@ test("pressing 'a' at a gate approves", async () => {
 });
 
 test("pressing 's' at a gate stops", async () => {
-  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0 });
+  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0, viewing: false });
   const { stdin } = render(<App controller={c as any} />);
   stdin.write("s");
   await delay();
@@ -82,7 +83,7 @@ test("pressing 's' at a gate stops", async () => {
 });
 
 test("renders a quit hint on a terminal state", () => {
-  const c = spyController({ mode: "prompt", state: "done", task: null, feed: [], message: "task complete", tasks: [], selected: 0 });
+  const c = spyController({ mode: "prompt", state: "done", task: null, feed: [], message: "task complete", tasks: [], selected: 0, viewing: false });
   const { lastFrame } = render(<App controller={c as any} />);
   expect((lastFrame() ?? "").toLowerCase()).toContain("quit");
 });

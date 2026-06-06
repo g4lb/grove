@@ -19,6 +19,7 @@ export interface ControllerView {
   message: string;
   tasks: Task[];
   selected: number;
+  viewing: boolean;
 }
 
 /** Holds TUI run state and drives the engine. No Ink — fully unit-testable. */
@@ -32,7 +33,7 @@ export class TaskRunController {
     this.lister = lister;
   }
 
-  private view: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0 };
+  private view: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
 
   constructor(
     private engine: ControllerEngine,
@@ -61,7 +62,7 @@ export class TaskRunController {
 
   async start(prose: string): Promise<void> {
     if (this.view.state === "running") return;
-    this.set({ state: "running" });
+    this.set({ state: "running", viewing: false });
     try {
       const routed = await this.router.classify(prose);
       this.push(`detected: ${routed.kind}`);
@@ -129,11 +130,11 @@ export class TaskRunController {
   }
 
   backToPrompt(): void {
-    this.set({ mode: "prompt", state: "idle", task: null, message: "", feed: [] });
+    this.set({ mode: "prompt", state: "idle", task: null, message: "", feed: [], viewing: false });
   }
 
   private loadTask(t: Task): void {
-    this.view = { ...this.view, mode: "prompt", task: t };
+    this.view = { ...this.view, mode: "prompt", task: t, viewing: true };
     this.applyTask(t);
   }
 

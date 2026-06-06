@@ -31,7 +31,7 @@ function spyController(view: ControllerView) {
   };
 }
 
-const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0 };
+const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
 function delay(ms = 40) { return new Promise((r) => setTimeout(r, ms)); }
 
 test("idle Enter routes input through submit (so /list works)", async () => {
@@ -95,4 +95,18 @@ test("terminal-state hint mentions starting a new prompt and quitting", () => {
   const frame = (lastFrame() ?? "").toLowerCase();
   expect(frame).toContain("new prompt");
   expect(frame).toContain("quit");
+});
+
+test("Esc escapes an opened task (even a stale running one) back to the prompt", async () => {
+  const c = spyController({ ...idle, viewing: true, state: "running", task: task({ id: "task_1", status: "running" }), message: "" });
+  const { stdin } = render(<App controller={c as any} />);
+  stdin.write("\x1B"); // escape
+  await delay();
+  expect(c.nav).toContain("back");
+});
+
+test("a viewed task shows an esc-back hint", () => {
+  const c = spyController({ ...idle, viewing: true, state: "running", task: task({ id: "task_1", status: "running" }), message: "" });
+  const { lastFrame } = render(<App controller={c as any} />);
+  expect((lastFrame() ?? "").toLowerCase()).toContain("esc");
 });

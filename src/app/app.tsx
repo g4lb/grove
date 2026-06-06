@@ -41,6 +41,10 @@ export function App({ controller }: AppProps): React.ReactElement {
       else if (key.escape) controller.backToPrompt();
       return;
     }
+    if (view.viewing && key.escape) {
+      controller.backToPrompt();
+      return;
+    }
     if (terminal) {
       if (key.return) controller.backToPrompt();
       else if (char === "q" || (key.ctrl && char === "c")) exit();
@@ -113,6 +117,8 @@ export function App({ controller }: AppProps): React.ReactElement {
       {terminal && <Text dimColor>enter: new prompt · q: quit</Text>}
 
       {view.state === "running" && <Text dimColor>working…</Text>}
+
+      {view.viewing && <Text dimColor>esc: back</Text>}
 
       {view.state === "waiting_confirm" && !feedbackMode && (
         <Text color="cyan">(a) approve / (r) request changes / (s) stop</Text>
