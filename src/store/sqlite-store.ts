@@ -176,11 +176,27 @@ export class SqliteStore implements Store {
       .all(taskId) as PhaseRunRow[];
     return rows.map(mapPhaseRun);
   }
-  appendEvent(_input: AppendEventInput): TaskEvent {
-    throw new Error("not implemented");
+  appendEvent(input: AppendEventInput): TaskEvent {
+    const id = newId("evt");
+    const ts = this.now();
+    const payload = JSON.stringify(input.payload);
+    this.db
+      .query("INSERT INTO events (id, task_id, ts, type, payload) VALUES (?, ?, ?, ?, ?)")
+      .run(id, input.taskId, ts, input.type, payload);
+    return { id, taskId: input.taskId, ts, type: input.type, payload };
   }
-  getEvents(_taskId: string): TaskEvent[] {
-    throw new Error("not implemented");
+
+  getEvents(taskId: string): TaskEvent[] {
+    const rows = this.db
+      .query("SELECT * FROM events WHERE task_id = ? ORDER BY rowid ASC")
+      .all(taskId) as Array<{ id: string; task_id: string; ts: string; type: string; payload: string }>;
+    return rows.map((r) => ({
+      id: r.id,
+      taskId: r.task_id,
+      ts: r.ts,
+      type: r.type,
+      payload: r.payload,
+    }));
   }
 
   close(): void {
