@@ -23,6 +23,6 @@ export class GitRunner {
       "rev-parse",
       "--is-inside-work-tree",
     ]);
-    return res.code === 0;
+    return res.code === 0 && res.stdout.trim() === "true";
   }
 }

@@ -32,3 +32,8 @@ test("isGitRepo returns true on exit 0, false otherwise", async () => {
   const no = new GitRunner(new RecordingRunner({ code: 128, stdout: "", stderr: "fatal" }), "/repo");
   expect(await no.isGitRepo()).toBe(false);
 });
+
+test("isGitRepo returns false when inside a .git dir (exit 0 but stdout 'false')", async () => {
+  const inGitDir = new GitRunner(new RecordingRunner({ code: 0, stdout: "false\n", stderr: "" }), "/repo/.git");
+  expect(await inGitDir.isGitRepo()).toBe(false);
+});
