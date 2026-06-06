@@ -73,3 +73,9 @@ test("pressing 's' at a gate stops", async () => {
   await delay();
   expect(c.decisions).toContainEqual({ kind: "stop" });
 });
+
+test("renders a quit hint on a terminal state", () => {
+  const c = spyController({ state: "done", task: null, feed: [], message: "task complete" });
+  const { lastFrame } = render(<App controller={c as any} />);
+  expect((lastFrame() ?? "").toLowerCase()).toContain("quit");
+});

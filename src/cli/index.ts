@@ -56,10 +56,13 @@ async function launchTui(): Promise<number> {
   const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
   const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
 
-  const { waitUntilExit } = render(React.createElement(App, { controller }));
-  await waitUntilExit();
-  store.close();
-  return 0;
+  try {
+    const { waitUntilExit } = render(React.createElement(App, { controller }));
+    await waitUntilExit();
+    return 0;
+  } finally {
+    store.close();
+  }
 }
 
 async function main(argv: string[]): Promise<number> {

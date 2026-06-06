@@ -51,20 +51,30 @@ export class TaskRunController {
   };
 
   async start(prose: string): Promise<void> {
-    const routed = await this.router.classify(prose);
-    this.push(`detected: ${routed.kind}`);
-    const kind: TaskKind = routed.kind === "debug" ? "issue" : "task";
-    if (routed.kind === "debug") this.push("debugging is coming in v1.1 — running as a task");
-    this.set({ state: "running" });
-    const task = await this.engine.startTask({ title: prose, repoPath: this.repoPath, kind }, this.onEvent);
-    this.applyTask(task);
+    if (this.view.state === "running") return;
+    try {
+      const routed = await this.router.classify(prose);
+      this.push(`detected: ${routed.kind}`);
+      const kind: TaskKind = routed.kind === "debug" ? "issue" : "task";
+      if (routed.kind === "debug") this.push("debugging is coming in v1.1 — running as a task");
+      this.set({ state: "running" });
+      const task = await this.engine.startTask({ title: prose, repoPath: this.repoPath, kind }, this.onEvent);
+      this.applyTask(task);
+    } catch (err) {
+      this.set({ state: "blocked", message: `failed: ${err instanceof Error ? err.message : String(err)}` });
+    }
   }
 
   async decide(decision: GateDecision): Promise<void> {
     if (!this.view.task) return;
-    this.set({ state: "running" });
-    const task = await this.engine.confirmGate(this.view.task.id, decision, this.onEvent);
-    this.applyTask(task);
+    if (this.view.state === "running") return;
+    try {
+      this.set({ state: "running" });
+      const task = await this.engine.confirmGate(this.view.task.id, decision, this.onEvent);
+      this.applyTask(task);
+    } catch (err) {
+      this.set({ state: "blocked", message: `failed: ${err instanceof Error ? err.message : String(err)}` });
+    }
   }
 
   private applyTask(task: Task): void {

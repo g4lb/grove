@@ -90,3 +90,60 @@ test("onChange fires when state changes", async () => {
   await c.start("add a page");
   expect(changes).toBeGreaterThan(0);
 });
+
+test("start surfaces an engine error as blocked (does not hang on running)", async () => {
+  const engine: ControllerEngine = {
+    async startTask() {
+      throw new Error("provision failed: docker down");
+    },
+    async confirmGate() {
+      throw new Error("unused");
+    },
+  };
+  const c = new TaskRunController(engine, new HeuristicRouter(), "/repo");
+  await c.start("add a page");
+  const v = c.snapshot();
+  expect(v.state).toBe("blocked");
+  expect(v.message.toLowerCase()).toContain("fail");
+});
+
+test("decide surfaces a confirmGate error as blocked", async () => {
+  let calls = 0;
+  const engine: ControllerEngine = {
+    async startTask() {
+      return task({ status: "waiting_confirm", currentPhase: "brainstorm" });
+    },
+    async confirmGate() {
+      calls++;
+      throw new Error("cannot approve a completed task");
+    },
+  };
+  const c = new TaskRunController(engine, new HeuristicRouter(), "/repo");
+  await c.start("add a page");
+  await c.decide({ kind: "approve" });
+  expect(c.snapshot().state).toBe("blocked");
+  expect(calls).toBe(1);
+});
+
+test("decide is a no-op while a run is already in flight (no double-fire)", async () => {
+  let calls = 0;
+  let release: (() => void) | null = null;
+  const gate = new Promise<void>((r) => (release = r));
+  const engine: ControllerEngine = {
+    async startTask() {
+      return task({ status: "waiting_confirm", currentPhase: "brainstorm" });
+    },
+    async confirmGate() {
+      calls++;
+      await gate;
+      return task({ status: "done", currentPhase: "finish" });
+    },
+  };
+  const c = new TaskRunController(engine, new HeuristicRouter(), "/repo");
+  await c.start("add a page");
+  const p1 = c.decide({ kind: "approve" }); // enters running, awaits gate
+  const p2 = c.decide({ kind: "approve" }); // should be a no-op (already running)
+  release!();
+  await Promise.all([p1, p2]);
+  expect(calls).toBe(1);
+});

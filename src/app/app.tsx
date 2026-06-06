@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useReducer, useRef } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useApp } from "ink";
 import type { TaskRunController } from "./controller.ts";
 
 export interface AppProps {
@@ -7,6 +7,7 @@ export interface AppProps {
 }
 
 export function App({ controller }: AppProps): React.ReactElement {
+  const { exit } = useApp();
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const [input, setInput] = useState("");
   const [feedbackMode, setFeedbackMode] = useState(false);
@@ -27,8 +28,13 @@ export function App({ controller }: AppProps): React.ReactElement {
   }, [controller]);
 
   const view = controller.snapshot();
+  const terminal = view.state === "done" || view.state === "blocked" || view.state === "stopped";
 
   useInput((char, key) => {
+    if (terminal) {
+      if (char === "q" || key.return || (key.ctrl && char === "c")) exit();
+      return;
+    }
     if (view.state === "idle") {
       if (key.return) {
         const prose = inputRef.current.trim();
@@ -76,6 +82,8 @@ export function App({ controller }: AppProps): React.ReactElement {
       ))}
 
       {view.message.length > 0 && <Text>{view.message}</Text>}
+
+      {terminal && <Text dimColor>press q to quit</Text>}
 
       {view.state === "running" && <Text dimColor>working…</Text>}
 
