@@ -42,6 +42,8 @@ export class GitWorktreeManager implements WorktreeManager {
 
   async remove(taskId: string): Promise<void> {
     const worktreePath = this.worktreePathFor(taskId);
+    // --force is required because a task worktree normally has uncommitted changes;
+    // the committed work lives on the grove/<...> branch, which is not deleted here.
     await this.git.git(["worktree", "remove", "--force", worktreePath]);
   }
 
@@ -55,6 +57,8 @@ export class GitWorktreeManager implements WorktreeManager {
 
   async getDiff(taskId: string): Promise<string> {
     const worktreePath = this.worktreePathFor(taskId);
+    // GitRunner already injects `-C <repoPath>`; this second absolute `-C <worktreePath>`
+    // overrides it so the diff runs in the task's worktree (absolute path is required).
     const res = await this.git.git(["-C", worktreePath, "diff", "HEAD"]);
     return res;
   }
