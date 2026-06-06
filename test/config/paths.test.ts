@@ -9,3 +9,10 @@ test("resolvePaths derives the grove layout from a root", () => {
   expect(p.configFile).toBe("/tmp/groveroot/config.json");
   expect(p.taskDir("task_123")).toBe("/tmp/groveroot/tasks/task_123");
 });
+
+test("resolvePaths makes a relative root absolute", () => {
+  const p = resolvePaths("relative/grove");
+  expect(p.root.startsWith("/")).toBe(true);
+  expect(p.root.endsWith("relative/grove")).toBe(true);
+  expect(p.dbFile.startsWith("/")).toBe(true);
+});
