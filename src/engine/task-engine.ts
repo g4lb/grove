@@ -112,6 +112,13 @@ export class TaskEngine {
     return this.runFrom(taskId, next);
   }
 
+  /** Resume a crashed-`running`, `blocked`, or `stopped` task by re-running its current phase forward. */
+  async resume(taskId: string): Promise<Task> {
+    const task = this.requireTask(taskId);
+    if (task.status === "waiting_confirm" || task.status === "done") return task;
+    return this.runFrom(taskId, task.currentPhase);
+  }
+
   /** Run phases from `start` forward, persisting, until a gate / terminal / failure. */
   protected async runFrom(
     taskId: string,
