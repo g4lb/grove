@@ -1,0 +1,38 @@
+import type { CommandRunner } from "./command-runner.ts";
+
+export type DiskVerdict = "ok" | "warn" | "block";
+
+export interface DiskThresholds {
+  warnBytes: number;
+  blockBytes: number;
+}
+
+export interface DiskMonitor {
+  freeBytes(path: string): Promise<number>;
+  evaluate(freeBytes: number, thresholds: DiskThresholds): DiskVerdict;
+}
+
+export class ShellDiskMonitor implements DiskMonitor {
+  constructor(private runner: CommandRunner) {}
+
+  async freeBytes(path: string): Promise<number> {
+    const res = await this.runner.run("df", ["-k", path]);
+    if (res.code !== 0) {
+      throw new Error(`df -k ${path} failed (exit ${res.code}): ${res.stderr.trim()}`);
+    }
+    const lines = res.stdout.trim().split("\n");
+    const dataLine = lines[lines.length - 1]!;
+    const cols = dataLine.trim().split(/\s+/);
+    const availableKiB = Number(cols[3]);
+    if (!Number.isFinite(availableKiB)) {
+      throw new Error(`could not parse df output: ${dataLine}`);
+    }
+    return availableKiB * 1024;
+  }
+
+  evaluate(freeBytes: number, thresholds: DiskThresholds): DiskVerdict {
+    if (freeBytes < thresholds.blockBytes) return "block";
+    if (freeBytes < thresholds.warnBytes) return "warn";
+    return "ok";
+  }
+}
