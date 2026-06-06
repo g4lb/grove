@@ -12,3 +12,10 @@ test("newId returns unique ids", () => {
   const b = newId("task");
   expect(a).not.toBe(b);
 });
+
+test("newId uses a full uuid suffix for collision resistance", () => {
+  const id = newId("task");
+  const suffix = id.slice("task_".length);
+  // full UUID v4: 8-4-4-4-12 hex with dashes
+  expect(suffix).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+});
