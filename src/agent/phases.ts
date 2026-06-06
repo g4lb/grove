@@ -68,6 +68,11 @@ export function buildPrompt(phase: Phase, ctx: PhaseContext): string {
     lines.push("Prior artifacts (read these for context):");
     for (const a of ctx.priorArtifacts) lines.push(`- ${a.phase}: ${a.path}`);
   }
+  if (ctx.feedback) {
+    lines.push("");
+    lines.push("Requested changes from the previous attempt (address these):");
+    lines.push(ctx.feedback);
+  }
   lines.push("");
   lines.push(`Begin the ${phase} phase now.`);
   return lines.join("\n");

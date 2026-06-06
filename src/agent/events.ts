@@ -26,4 +26,6 @@ export interface PhaseContext {
   model: string;
   /** Artifacts produced by earlier phases, passed forward as context. */
   priorArtifacts: Array<{ phase: Phase; path: string }>;
+  /** Reviewer feedback for a re-run of this phase ("request changes"); absent on a first run. */
+  feedback?: string;
 }
