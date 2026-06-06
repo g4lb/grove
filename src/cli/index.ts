@@ -33,12 +33,13 @@ async function main(argv: string[]): Promise<number> {
       return report.ok ? 0 : 1;
     }
     case "init": {
+      const paths = grovePaths();
       const result = await runInit({
         runner: new BunCommandRunner(),
-        paths: grovePaths(),
+        paths,
         repoPath: process.cwd(),
       });
-      console.log(`grove initialized at ${grovePaths().root}`);
+      console.log(`grove initialized at ${paths.root}`);
       console.log(`${result.isGitRepo ? "✓" : "✗"} current directory is a git repo`);
       for (const c of result.doctor.checks) {
         console.log(`${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
