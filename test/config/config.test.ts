@@ -32,6 +32,14 @@ test("loadConfig merges partial file over defaults", async () => {
   expect(cfg.disk.blockBytes).toBe(DEFAULT_CONFIG.disk.blockBytes);
 });
 
+test("loadConfig falls back to defaults on malformed JSON", async () => {
+  const paths = tempPaths();
+  await Bun.write(paths.configFile, "{ not valid json ");
+  const cfg = await loadConfig(paths);
+  expect(cfg.disk.warnBytes).toBe(DEFAULT_CONFIG.disk.warnBytes);
+  expect(cfg.disk.blockBytes).toBe(DEFAULT_CONFIG.disk.blockBytes);
+});
+
 test("loadConfig returns a fresh object that does not alias DEFAULT_CONFIG", async () => {
   const paths = tempPaths();
   const cfg = await loadConfig(paths);

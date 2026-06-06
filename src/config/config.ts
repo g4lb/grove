@@ -17,7 +17,13 @@ export const DEFAULT_CONFIG: GroveConfig = {
 export async function loadConfig(paths: GrovePaths): Promise<GroveConfig> {
   const file = Bun.file(paths.configFile);
   if (!(await file.exists())) return { disk: { ...DEFAULT_CONFIG.disk } };
-  const parsed = (await file.json()) as Partial<GroveConfig>;
+  let parsed: Partial<GroveConfig>;
+  try {
+    parsed = (await file.json()) as Partial<GroveConfig>;
+  } catch {
+    // Malformed config file — fall back to defaults rather than breaking every command.
+    return { disk: { ...DEFAULT_CONFIG.disk } };
+  }
   return {
     disk: { ...DEFAULT_CONFIG.disk, ...(parsed.disk ?? {}) },
   };
