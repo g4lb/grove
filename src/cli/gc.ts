@@ -59,7 +59,17 @@ export async function runGc(deps: GcDeps): Promise<GcReport> {
       continue;
     }
     try {
-      await deps.downProject(composeProjectFor(id));
+      const downOk = await deps.downProject(composeProjectFor(id));
+      if (!downOk) {
+        // Teardown did not complete cleanly (e.g. docker unavailable or a container
+        // that won't stop). Do NOT remove the worktree — leave it so the next gc run
+        // rediscovers and retries — and surface the failure so the exit code is honest.
+        report.errors.push({
+          taskId: id,
+          message: "docker compose down did not complete; leaving worktree for retry",
+        });
+        continue;
+      }
       await deps.removeWorktree(id);
       report.reclaimed.push(id);
     } catch (err) {
