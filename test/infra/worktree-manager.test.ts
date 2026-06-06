@@ -40,3 +40,56 @@ test("create() throws if git worktree add fails", async () => {
   const mgr = new GitWorktreeManager(git, paths);
   await expect(mgr.create("task_1234abcd", "x")).rejects.toThrow("already exists");
 });
+
+test("remove() calls git worktree remove --force on the task worktree", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner(() => OK());
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+
+  await mgr.remove("task_1234abcd");
+
+  const call = runner.calls.find((a) => a.includes("worktree") && a.includes("remove"))!;
+  expect(call).toContain("--force");
+  expect(call).toContain("/groveroot/tasks/task_1234abcd/worktree");
+});
+
+test("list() parses porcelain output into worktree paths", async () => {
+  const paths = resolvePaths("/groveroot");
+  const porcelain = [
+    "worktree /repo",
+    "HEAD deadbeef",
+    "branch refs/heads/main",
+    "",
+    "worktree /groveroot/tasks/task_1/worktree",
+    "HEAD cafef00d",
+    "branch refs/heads/grove/1-x",
+    "",
+  ].join("\n");
+  const runner = new ScriptedRunner(() => OK(porcelain));
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+
+  const paths2 = await mgr.list();
+  expect(paths2).toEqual(["/repo", "/groveroot/tasks/task_1/worktree"]);
+});
+
+test("getDiff() runs diff inside the worktree dir", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner(() => OK("diff --git a/f b/f\n+x"));
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+
+  const diff = await mgr.getDiff("task_1234abcd");
+  expect(diff).toContain("diff --git");
+
+  const call = runner.calls.find((a) => a.includes("diff"))!;
+  expect(call).toEqual([
+    "-C",
+    "/repo",
+    "-C",
+    "/groveroot/tasks/task_1234abcd/worktree",
+    "diff",
+    "HEAD",
+  ]);
+});
