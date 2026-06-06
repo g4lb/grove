@@ -27,6 +27,7 @@ export interface TaskEngineDeps {
 }
 
 type EventHandler = (event: AgentEvent) => void;
+type OnEvent = (event: AgentEvent) => void;
 
 export class TaskEngine {
   private store: Store;
@@ -82,24 +83,29 @@ export class TaskEngine {
     return task;
   }
 
-  async startTask(input: StartTaskInput): Promise<Task> {
+  async startTask(input: StartTaskInput, onEvent?: OnEvent): Promise<Task> {
     const task = this.store.createTask({
       title: input.title,
       description: input.description,
       kind: input.kind,
       repoPath: input.repoPath,
     });
-    const result = await this.infra.provision(task.id, input.title);
-    this.store.updateTask(task.id, {
-      worktreePath: result.worktree.worktreePath,
-      branch: result.worktree.branch,
-      composeProject: result.composeStarted ? `grove-${task.id}` : null,
-    });
-    this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
-    return this.runFrom(task.id, "brainstorm");
+    const off = onEvent ? this.subscribe(task.id, onEvent) : () => {};
+    try {
+      const result = await this.infra.provision(task.id, input.title);
+      this.store.updateTask(task.id, {
+        worktreePath: result.worktree.worktreePath,
+        branch: result.worktree.branch,
+        composeProject: result.composeStarted ? `grove-${task.id}` : null,
+      });
+      this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
+      return await this.runFrom(task.id, "brainstorm");
+    } finally {
+      off();
+    }
   }
 
-  async confirmGate(taskId: string, decision: GateDecision): Promise<Task> {
+  async confirmGate(taskId: string, decision: GateDecision, onEvent?: OnEvent): Promise<Task> {
     const task = this.requireTask(taskId);
 
     if (task.status === "done") {
@@ -110,18 +116,23 @@ export class TaskEngine {
       return this.store.updateTask(taskId, { status: "stopped" });
     }
 
-    if (decision.kind === "rerun") {
-      // Re-run the current phase ("request changes" with feedback, or "retry" without).
-      return this.runFrom(taskId, task.currentPhase, decision.feedback);
-    }
+    const off = onEvent ? this.subscribe(taskId, onEvent) : () => {};
+    try {
+      if (decision.kind === "rerun") {
+        // Re-run the current phase ("request changes" with feedback, or "retry" without).
+        return await this.runFrom(taskId, task.currentPhase, decision.feedback);
+      }
 
-    // approve
-    if (task.status !== "waiting_confirm") {
-      throw new Error(`cannot approve task ${taskId} in status ${task.status}`);
+      // approve
+      if (task.status !== "waiting_confirm") {
+        throw new Error(`cannot approve task ${taskId} in status ${task.status}`);
+      }
+      const next = nextPhase(task.currentPhase);
+      if (!next) throw new Error(`no phase after ${task.currentPhase}`);
+      return await this.runFrom(taskId, next);
+    } finally {
+      off();
     }
-    const next = nextPhase(task.currentPhase);
-    if (!next) throw new Error(`no phase after ${task.currentPhase}`);
-    return this.runFrom(taskId, next);
   }
 
   /** Resume a crashed-`running`, `blocked`, or `stopped` task by re-running its current phase forward. */
