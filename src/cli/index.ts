@@ -12,11 +12,20 @@ import { GitRunner } from "../infra/git-runner.ts";
 import { GitWorktreeManager } from "../infra/worktree-manager.ts";
 import { DockerComposeManager } from "../infra/compose-manager.ts";
 import { runGc, gcDeps, findOrphans } from "./gc.ts";
+import { loadConfig } from "../config/config.ts";
+import { InfraManager } from "../infra/infra-manager.ts";
+import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
+import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
+import { detectCredentials } from "../agent/credentials.ts";
+import { HeuristicRouter } from "../engine/router.ts";
+import { TaskEngine } from "../engine/task-engine.ts";
+import { runTask } from "./run-driver.ts";
+import { stdinGateDecider } from "./gate-prompt.ts";
 
 const VERSION = "0.0.1";
 
 function printUsage(): void {
-  console.log("grove — usage: grove [init | gc [--yes] | doctor | --version]");
+  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | --version]');
 }
 
 function grovePaths() {
@@ -86,6 +95,48 @@ async function main(argv: string[]): Promise<number> {
         console.log(`\nReclaimed ${report.reclaimed.length}, kept ${report.kept.length}, errors ${report.errors.length}.`);
         for (const e of report.errors) console.log(`  ! ${e.taskId}: ${e.message}`);
         return report.errors.length === 0 ? 0 : 1;
+      } finally {
+        store.close();
+      }
+    }
+    case "run": {
+      const yes = argv.includes("--yes");
+      const prose = argv.slice(3).filter((a) => !a.startsWith("--")).join(" ").trim();
+      if (prose.length === 0) {
+        console.log('grove — usage: grove run "<what you want to do>" [--yes]');
+        return 0;
+      }
+
+      const paths = grovePaths();
+      mkdirSync(paths.tasksDir, { recursive: true });
+      const runner = new BunCommandRunner();
+      const repoPath = process.cwd();
+      const store = SqliteStore.open(paths.dbFile);
+      try {
+        const config = await loadConfig(paths);
+        const git = new GitRunner(runner, repoPath);
+        const worktrees = new GitWorktreeManager(git, paths);
+        const compose = new DockerComposeManager(new DockerRunner(runner));
+        const infra = new InfraManager(worktrees, compose);
+        const agent = new SdkAgentRunner({ env: process.env });
+        const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
+
+        const result = await runTask(prose, {
+          engine,
+          router: new HeuristicRouter(),
+          disk: new ShellDiskMonitor(runner),
+          thresholds: config.disk,
+          paths,
+          repoPath,
+          hasCredential: detectCredentials(process.env).present,
+          isGitRepo: await git.isGitRepo(),
+          yes,
+          decide: () => stdinGateDecider(async (p) => prompt(p) ?? ""),
+          out: (line) => console.log(line),
+        });
+
+        console.log(`\n${result.message}`);
+        return result.ok ? 0 : 1;
       } finally {
         store.close();
       }
