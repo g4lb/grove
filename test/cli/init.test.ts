@@ -28,6 +28,8 @@ function allGreenRunner(): CommandRunner {
 test("runInit creates grove dirs, db, and config; reports ok", async () => {
   const root = join(mkdtempSync(join(tmpdir(), "grove-")), ".grove");
   const paths = resolvePaths(root);
+  const prevKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "sk-test";
   try {
     const result = await runInit({ runner: allGreenRunner(), paths, repoPath: "/repo" });
     expect(result.ok).toBe(true);
@@ -37,6 +39,8 @@ test("runInit creates grove dirs, db, and config; reports ok", async () => {
     expect(existsSync(paths.configFile)).toBe(true);
     expect(result.doctor.ok).toBe(true);
   } finally {
+    if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevKey;
     rmSync(root, { recursive: true, force: true });
   }
 });
@@ -64,11 +68,15 @@ test("runInit reports not-a-git-repo and ok=false when cwd is not a repo", async
 test("runInit is idempotent (second run does not throw or clobber config)", async () => {
   const root = join(mkdtempSync(join(tmpdir(), "grove-")), ".grove");
   const paths = resolvePaths(root);
+  const prevKey = process.env.ANTHROPIC_API_KEY;
+  process.env.ANTHROPIC_API_KEY = "sk-test";
   try {
     await runInit({ runner: allGreenRunner(), paths, repoPath: "/repo" });
     const second = await runInit({ runner: allGreenRunner(), paths, repoPath: "/repo" });
     expect(second.ok).toBe(true);
   } finally {
+    if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = prevKey;
     rmSync(root, { recursive: true, force: true });
   }
 });

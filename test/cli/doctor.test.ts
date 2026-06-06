@@ -18,9 +18,9 @@ test("runDoctor reports ok when all dependencies are present", async () => {
     "docker --version": OK("Docker version 27.0.0"),
     "docker compose version": OK("Docker Compose version v2.29.0"),
   });
-  const report = await runDoctor(runner);
+  const report = await runDoctor(runner, { ANTHROPIC_API_KEY: "sk-test" });
   expect(report.ok).toBe(true);
-  expect(report.checks.length).toBe(3);
+  expect(report.checks.length).toBe(4);
   expect(report.checks.every((c) => c.ok)).toBe(true);
   const git = report.checks.find((c) => c.name === "git")!;
   expect(git.detail).toBe("git version 2.45.0");

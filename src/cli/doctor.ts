@@ -1,4 +1,5 @@
 import type { CommandRunner } from "../infra/command-runner.ts";
+import { detectCredentials } from "../agent/credentials.ts";
 
 export interface DependencyCheck {
   name: string;
@@ -23,7 +24,10 @@ const REQUIRED: Dependency[] = [
   { name: "docker compose", cmd: "docker", args: ["compose", "version"] },
 ];
 
-export async function runDoctor(runner: CommandRunner): Promise<DoctorReport> {
+export async function runDoctor(
+  runner: CommandRunner,
+  env: Record<string, string | undefined> = process.env,
+): Promise<DoctorReport> {
   const checks: DependencyCheck[] = [];
   for (const dep of REQUIRED) {
     const res = await runner.run(dep.cmd, dep.args);
@@ -37,5 +41,15 @@ export async function runDoctor(runner: CommandRunner): Promise<DoctorReport> {
       });
     }
   }
+
+  const cred = detectCredentials(env);
+  checks.push({
+    name: "anthropic credential",
+    ok: cred.present,
+    detail: cred.present
+      ? `found (${cred.kind})`
+      : "set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)",
+  });
+
   return { checks, ok: checks.every((c) => c.ok) };
 }
