@@ -1,16 +1,10 @@
-import { test, expect } from "bun:test";
+import { test, expect, beforeEach, afterEach } from "bun:test";
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SdkAgentRunner, type QueryFn } from "../../src/agent/sdk-agent-runner.ts";
 import type { AgentEvent, PhaseContext } from "../../src/agent/events.ts";
 
-const ctx: PhaseContext = {
-  taskId: "task_1",
-  title: "Add login",
-  worktreePath: "/wt",
-  model: "claude-opus-4-8",
-  priorArtifacts: [],
-};
-
-// A fake query() that yields a realistic SDKMessage sequence.
 function fakeQuery(messages: unknown[]): QueryFn {
   return ((_args: unknown) => {
     async function* gen() {
@@ -20,7 +14,34 @@ function fakeQuery(messages: unknown[]): QueryFn {
   }) as unknown as QueryFn;
 }
 
+let wt: string;
+beforeEach(() => {
+  wt = mkdtempSync(join(tmpdir(), "grove-sdk-"));
+});
+afterEach(() => {
+  rmSync(wt, { recursive: true, force: true });
+});
+
+function ctxFor(worktreePath: string): PhaseContext {
+  return { taskId: "task_1", title: "Add login", worktreePath, model: "claude-opus-4-8", priorArtifacts: [] };
+}
+
+async function drain(gen: AsyncGenerator<AgentEvent, any>) {
+  const seen: AgentEvent[] = [];
+  let next = await gen.next();
+  while (!next.done) {
+    seen.push(next.value);
+    next = await gen.next();
+  }
+  return { seen, result: next.value };
+}
+
 test("maps stream tokens and tool_use blocks to AgentEvents and returns a success result", async () => {
+  // brainstorm declares .grove/design.md as its gate artifact — create it so the
+  // existence check passes and success is a real guarantee.
+  mkdirSync(join(wt, ".grove"), { recursive: true });
+  writeFileSync(join(wt, ".grove", "design.md"), "# design\n");
+
   const runner = new SdkAgentRunner({
     queryFn: fakeQuery([
       { type: "system", subtype: "init", session_id: "sess-1" },
@@ -31,22 +52,29 @@ test("maps stream tokens and tool_use blocks to AgentEvents and returns a succes
     env: { ANTHROPIC_API_KEY: "sk-test" },
   });
 
-  const seen: AgentEvent[] = [];
-  const gen = runner.run("brainstorm", ctx);
-  let next = await gen.next();
-  while (!next.done) {
-    seen.push(next.value);
-    next = await gen.next();
-  }
-
+  const { seen, result } = await drain(runner.run("brainstorm", ctxFor(wt)));
   expect(seen).toContainEqual({ type: "token", text: "Hello" });
   expect(seen).toContainEqual({ type: "tool_use", tool: "Write", input: { path: ".grove/design.md" } });
-  const result = next.value;
   expect(result.success).toBe(true);
   expect(result.summary).toBe("design complete");
   expect(result.costUsd).toBe(0.02);
   expect(result.sessionId).toBe("sess-1");
-  expect(result.artifactPath).toBe("/wt/.grove/design.md");
+  expect(result.artifactPath).toBe(join(wt, ".grove/design.md"));
+});
+
+test("downgrades to success:false when the SDK reports success but the gate artifact was not written", async () => {
+  // No file created in wt/.grove — the artifact is missing.
+  const runner = new SdkAgentRunner({
+    queryFn: fakeQuery([
+      { type: "system", subtype: "init", session_id: "s" },
+      { type: "result", subtype: "success", result: "claims done", total_cost_usd: 0 },
+    ]),
+    env: { ANTHROPIC_API_KEY: "sk-test" },
+  });
+  const { result } = await drain(runner.run("brainstorm", ctxFor(wt)));
+  expect(result.success).toBe(false);
+  expect(result.summary).toContain("did not produce");
+  expect(result.artifactPath).toBe(join(wt, ".grove/design.md"));
 });
 
 test("returns success:false when the result subtype is an error", async () => {
@@ -57,12 +85,24 @@ test("returns success:false when the result subtype is an error", async () => {
     ]),
     env: { ANTHROPIC_API_KEY: "sk-test" },
   });
-  const gen = runner.run("execute", ctx);
-  let next = await gen.next();
-  while (!next.done) next = await gen.next();
-  expect(next.value.success).toBe(false);
-  expect(next.value.summary).toContain("error_max_turns");
-  expect(next.value.artifactPath).toBeNull();
+  const { result } = await drain(runner.run("execute", ctxFor(wt)));
+  expect(result.success).toBe(false);
+  expect(result.summary).toContain("error_max_turns");
+  expect(result.artifactPath).toBeNull(); // execute has no artifact
+});
+
+test("a thrown query()/stream error returns a failed PhaseResult instead of propagating", async () => {
+  const throwingQuery = (() => {
+    async function* gen() {
+      yield { type: "system", subtype: "init", session_id: "s" };
+      throw new Error("network drop");
+    }
+    return gen();
+  }) as unknown as QueryFn;
+  const runner = new SdkAgentRunner({ queryFn: throwingQuery, env: { ANTHROPIC_API_KEY: "sk-test" } });
+  const { result } = await drain(runner.run("execute", ctxFor(wt)));
+  expect(result.success).toBe(false);
+  expect(result.summary).toContain("network drop");
 });
 
 test("passes phase options into query (cwd, model, bypassPermissions, append, env)", async () => {
@@ -77,19 +117,15 @@ test("passes phase options into query (cwd, model, bypassPermissions, append, en
   }) as unknown as QueryFn;
 
   const runner = new SdkAgentRunner({ queryFn, env: { ANTHROPIC_API_KEY: "sk-test", FOO: "bar" } });
-  const gen = runner.run("plan", ctx);
-  while (!(await gen.next()).done) { /* drain */ }
+  await drain(runner.run("plan", ctxFor(wt)));
 
-  expect(captured.options.cwd).toBe("/wt");
+  expect(captured.options.cwd).toBe(wt);
   expect(captured.options.model).toBe("claude-opus-4-8");
   expect(captured.options.permissionMode).toBe("bypassPermissions");
   expect(captured.options.systemPrompt.preset).toBe("claude_code");
   expect(captured.options.systemPrompt.append.length).toBeGreaterThan(0);
   expect(captured.options.maxTurns).toBeGreaterThan(0);
-  // The full base env passes through so the SDK subprocess can launch (PATH, etc.),
-  // AND the credential is guaranteed present.
   expect(captured.options.env.ANTHROPIC_API_KEY).toBe("sk-test");
   expect(captured.options.env.FOO).toBe("bar");
-  // the prompt carries the task title
   expect(captured.prompt).toContain("Add login");
 });

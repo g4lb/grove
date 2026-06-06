@@ -10,7 +10,7 @@ export type AgentEvent =
 export interface PhaseResult {
   success: boolean;
   summary: string;
-  /** Absolute path to the phase's gate artifact, or null if the phase produces no file (e.g. execute). */
+  /** Absolute path to the phase's gate artifact (verified to exist when success is true), or null if the phase produces no file (e.g. execute). */
   artifactPath: string | null;
   costUsd: number;
   /** The SDK session id, for chaining context into the next phase. */
