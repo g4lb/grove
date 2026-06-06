@@ -20,7 +20,7 @@ export class ShellDiskMonitor implements DiskMonitor {
     // -P forces POSIX single-line output so the Available column stays at index 3 (GNU df wraps long device names).
     const res = await this.runner.run("df", ["-Pk", path]);
     if (res.code !== 0) {
-      throw new Error(`df -k ${path} failed (exit ${res.code}): ${res.stderr.trim()}`);
+      throw new Error(`df -Pk ${path} failed (exit ${res.code}): ${res.stderr.trim()}`);
     }
     const lines = res.stdout.trim().split("\n");
     const dataLine = lines[lines.length - 1]!;
