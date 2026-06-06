@@ -23,6 +23,9 @@ function shortId(taskId: string): string {
   return raw.slice(0, 8);
 }
 
+// NOTE: taskId is trusted here — it is always an internally generated `task_<hex>` id
+// (see domain/ids.ts), never user input, so it is safe to interpolate into branch names
+// and filesystem paths. If task ids ever become user-influenced, sanitize at this boundary.
 export class GitWorktreeManager implements WorktreeManager {
   constructor(
     private git: GitRunner,
