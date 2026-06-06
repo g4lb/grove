@@ -1,0 +1,33 @@
+import { test, expect } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { resolvePaths } from "../../src/config/paths.ts";
+import { loadConfig, saveConfig, DEFAULT_CONFIG } from "../../src/config/config.ts";
+
+function tempPaths() {
+  return resolvePaths(mkdtempSync(join(tmpdir(), "grove-")));
+}
+
+test("loadConfig returns defaults when no file exists", async () => {
+  const paths = tempPaths();
+  const cfg = await loadConfig(paths);
+  expect(cfg.disk.warnBytes).toBe(DEFAULT_CONFIG.disk.warnBytes);
+  expect(cfg.disk.blockBytes).toBe(DEFAULT_CONFIG.disk.blockBytes);
+});
+
+test("saveConfig then loadConfig round-trips overrides", async () => {
+  const paths = tempPaths();
+  await saveConfig(paths, { disk: { warnBytes: 5, blockBytes: 1 } });
+  const cfg = await loadConfig(paths);
+  expect(cfg.disk.warnBytes).toBe(5);
+  expect(cfg.disk.blockBytes).toBe(1);
+});
+
+test("loadConfig merges partial file over defaults", async () => {
+  const paths = tempPaths();
+  await Bun.write(paths.configFile, JSON.stringify({ disk: { warnBytes: 7 } }));
+  const cfg = await loadConfig(paths);
+  expect(cfg.disk.warnBytes).toBe(7);
+  expect(cfg.disk.blockBytes).toBe(DEFAULT_CONFIG.disk.blockBytes);
+});
