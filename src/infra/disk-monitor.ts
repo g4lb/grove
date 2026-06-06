@@ -17,7 +17,8 @@ export class ShellDiskMonitor implements DiskMonitor {
   constructor(private runner: CommandRunner) {}
 
   async freeBytes(path: string): Promise<number> {
-    const res = await this.runner.run("df", ["-k", path]);
+    // -P forces POSIX single-line output so the Available column stays at index 3 (GNU df wraps long device names).
+    const res = await this.runner.run("df", ["-Pk", path]);
     if (res.code !== 0) {
       throw new Error(`df -k ${path} failed (exit ${res.code}): ${res.stderr.trim()}`);
     }

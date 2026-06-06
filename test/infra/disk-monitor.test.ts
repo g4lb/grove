@@ -14,10 +14,10 @@ const DF_OUTPUT = [
   "/dev/disk1s1  488245288 200000000  20000000      91% /",
 ].join("\n");
 
-test("freeBytes parses df -k available blocks into bytes", async () => {
+test("freeBytes parses df -Pk available blocks into bytes", async () => {
   const runner = new MapRunner((cmd, args) => {
     expect(cmd).toBe("df");
-    expect(args).toEqual(["-k", "/some/path"]);
+    expect(args).toEqual(["-Pk", "/some/path"]);
     return { code: 0, stdout: DF_OUTPUT, stderr: "" };
   });
   const monitor = new ShellDiskMonitor(runner);
