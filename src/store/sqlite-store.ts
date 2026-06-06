@@ -179,7 +179,7 @@ export class SqliteStore implements Store {
   appendEvent(input: AppendEventInput): TaskEvent {
     const id = newId("evt");
     const ts = this.now();
-    const payload = JSON.stringify(input.payload);
+    const payload = JSON.stringify(input.payload ?? null);
     this.db
       .query("INSERT INTO events (id, task_id, ts, type, payload) VALUES (?, ?, ?, ?, ?)")
       .run(id, input.taskId, ts, input.type, payload);

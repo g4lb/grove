@@ -16,6 +16,15 @@ test("appendEvent stores JSON payload and returns the event", () => {
   store.close();
 });
 
+test("appendEvent stores 'null' when payload is undefined", () => {
+  const store = makeStore();
+  const task = store.createTask({ title: "x", kind: "task", repoPath: "/r" });
+  const evt = store.appendEvent({ taskId: task.id, type: "noop", payload: undefined });
+  expect(evt.payload).toBe("null");
+  expect(store.getEvents(task.id)[0]!.payload).toBe("null");
+  store.close();
+});
+
 test("getEvents returns events for a task in append order", () => {
   const store = makeStore();
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/r" });
