@@ -42,6 +42,30 @@ function mapTask(r: TaskRow): Task {
   };
 }
 
+interface PhaseRunRow {
+  id: string;
+  task_id: string;
+  phase: string;
+  state: string;
+  summary: string | null;
+  artifact_path: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+}
+
+function mapPhaseRun(r: PhaseRunRow): PhaseRun {
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    phase: r.phase as PhaseRun["phase"],
+    state: r.state as PhaseRun["state"],
+    summary: r.summary,
+    artifactPath: r.artifact_path,
+    startedAt: r.started_at,
+    endedAt: r.ended_at,
+  };
+}
+
 export interface SqliteStoreOptions {
   now?: () => string;
 }
@@ -121,14 +145,36 @@ export class SqliteStore implements Store {
   }
 
   // --- phase_runs and events implemented in Tasks 7 & 8 ---
-  createPhaseRun(_input: CreatePhaseRunInput): PhaseRun {
-    throw new Error("not implemented");
+  createPhaseRun(input: CreatePhaseRunInput): PhaseRun {
+    const id = newId("run");
+    this.db
+      .query(
+        `INSERT INTO phase_runs (id, task_id, phase, state, summary, artifact_path, started_at, ended_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(id, input.taskId, input.phase, input.state ?? "pending", null, null, null, null);
+    const row = this.db.query("SELECT * FROM phase_runs WHERE id = ?").get(id) as PhaseRunRow;
+    return mapPhaseRun(row);
   }
-  updatePhaseRun(_id: string, _patch: PhaseRunPatch): PhaseRun {
-    throw new Error("not implemented");
+
+  updatePhaseRun(id: string, patch: PhaseRunPatch): PhaseRun {
+    const row = this.db.query("SELECT * FROM phase_runs WHERE id = ?").get(id) as PhaseRunRow | null;
+    if (!row) throw new Error(`phase run not found: ${id}`);
+    const cur = mapPhaseRun(row);
+    const next: PhaseRun = { ...cur, ...patch };
+    this.db
+      .query(
+        `UPDATE phase_runs SET state = ?, summary = ?, artifact_path = ?, started_at = ?, ended_at = ? WHERE id = ?`,
+      )
+      .run(next.state, next.summary, next.artifactPath, next.startedAt, next.endedAt, id);
+    return next;
   }
-  getPhaseRuns(_taskId: string): PhaseRun[] {
-    throw new Error("not implemented");
+
+  getPhaseRuns(taskId: string): PhaseRun[] {
+    const rows = this.db
+      .query("SELECT * FROM phase_runs WHERE task_id = ? ORDER BY rowid ASC")
+      .all(taskId) as PhaseRunRow[];
+    return rows.map(mapPhaseRun);
   }
   appendEvent(_input: AppendEventInput): TaskEvent {
     throw new Error("not implemented");
