@@ -39,11 +39,10 @@ export class ShellDiskMonitor implements DiskMonitor {
   }
 
   async groveUsageBytes(tasksDir: string): Promise<number> {
+    // du exits 1 on permission warnings but still prints a valid running total to stdout,
+    // so parse stdout first and only fall back to 0 when there's genuinely no number
+    // (e.g. a missing directory prints nothing → NaN → 0).
     const res = await this.runner.run("du", ["-sk", tasksDir]);
-    if (res.code !== 0) {
-      // Directory missing / not yet created → no usage.
-      return 0;
-    }
     const firstCol = res.stdout.trim().split(/\s+/)[0];
     const kib = Number(firstCol);
     return Number.isFinite(kib) ? kib * 1024 : 0;
