@@ -21,7 +21,7 @@ import { InfraManager } from "../infra/infra-manager.ts";
 import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
 import { resolveClaudePath } from "../agent/claude-binary.ts";
-import { detectCredentials } from "../agent/credentials.ts";
+import { detectUsableCredential } from "../agent/credentials.ts";
 import { HeuristicRouter } from "../engine/router.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
 import { runTask } from "./run-driver.ts";
@@ -45,8 +45,8 @@ function grovePaths() {
 async function launchTui(): Promise<number> {
   const paths = grovePaths();
   mkdirSync(paths.tasksDir, { recursive: true });
-  if (!detectCredentials(process.env).present) {
-    console.log("no Anthropic credential — set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
+  if (!detectUsableCredential(process.env).present) {
+    console.log("no Anthropic credential — run `claude login`, or set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
     return 1;
   }
   const runtimeDir = join(paths.root, "runtime");
@@ -186,7 +186,7 @@ async function main(argv: string[]): Promise<number> {
           thresholds: config.disk,
           paths,
           repoPath,
-          hasCredential: detectCredentials(process.env).present,
+          hasCredential: detectUsableCredential(process.env).present,
           hasClaudeRuntime: claudePath !== null,
           isGitRepo: await git.isGitRepo(),
           yes,

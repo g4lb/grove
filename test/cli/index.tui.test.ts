@@ -24,6 +24,8 @@ test("grove with no args and no credential fails fast (does not launch the TUI)"
       GROVE_HOME: root,
       ANTHROPIC_API_KEY: "",
       CLAUDE_CODE_OAUTH_TOKEN: "",
+      // This dev machine is logged into Claude Code; force "no credential" deterministically.
+      GROVE_DISABLE_CLAUDE_LOGIN_DETECTION: "1",
     });
     expect(code).toBe(1);
     expect(stdout.toLowerCase()).toContain("credential");

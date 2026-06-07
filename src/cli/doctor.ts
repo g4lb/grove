@@ -1,5 +1,5 @@
 import type { CommandRunner } from "../infra/command-runner.ts";
-import { detectCredentials } from "../agent/credentials.ts";
+import { detectUsableCredential, type ClaudeLoginProbes } from "../agent/credentials.ts";
 
 export interface DependencyCheck {
   name: string;
@@ -47,6 +47,7 @@ export async function runDoctor(
   runner: CommandRunner,
   env: Record<string, string | undefined> = process.env,
   extraChecks: Array<() => DependencyCheck | Promise<DependencyCheck>> = [],
+  loginProbes: ClaudeLoginProbes = {},
 ): Promise<DoctorReport> {
   const checks: DependencyCheck[] = [];
   for (const dep of REQUIRED) {
@@ -62,13 +63,13 @@ export async function runDoctor(
     }
   }
 
-  const cred = detectCredentials(env);
+  const cred = detectUsableCredential(env, loginProbes);
   checks.push({
     name: "anthropic credential",
     ok: cred.present,
     detail: cred.present
       ? `found (${cred.kind})`
-      : "set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)",
+      : "run `claude login`, or set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)",
   });
 
   for (const c of extraChecks) {
