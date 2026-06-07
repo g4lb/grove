@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { runDoctor } from "./doctor.ts";
+import { runDoctor, checkClaudeRuntime } from "./doctor.ts";
 import { BunCommandRunner } from "../infra/command-runner.ts";
 import { runInit } from "./init.ts";
 import { resolvePaths } from "../config/paths.ts";
@@ -19,6 +19,7 @@ import { loadConfig } from "../config/config.ts";
 import { InfraManager } from "../infra/infra-manager.ts";
 import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
+import { resolveClaudePath } from "../agent/claude-binary.ts";
 import { detectCredentials } from "../agent/credentials.ts";
 import { HeuristicRouter } from "../engine/router.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
@@ -79,7 +80,17 @@ async function main(argv: string[]): Promise<number> {
       console.log(VERSION);
       return 0;
     case "doctor": {
-      const report = await runDoctor(new BunCommandRunner());
+      const paths = grovePaths();
+      const runtimeDir = join(paths.root, "runtime");
+      const markerPath = join(runtimeDir, "claude.version");
+      const report = await runDoctor(new BunCommandRunner(), process.env, [
+        () =>
+          checkClaudeRuntime({
+            resolve: () => resolveClaudePath({ env: process.env, runtimeDir }),
+            installedVersion: () => (existsSync(markerPath) ? readFileSync(markerPath, "utf8").trim() : null),
+            expected: CLAUDE_SDK_VERSION,
+          }),
+      ]);
       for (const c of report.checks) {
         console.log(`${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
       }
