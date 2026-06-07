@@ -93,7 +93,21 @@ export class TaskEngine {
     });
     const off = onEvent ? this.subscribe(task.id, onEvent) : () => {};
     try {
-      const result = await this.infra.provision(task.id, input.title);
+      let result;
+      try {
+        result = await this.infra.provision(task.id, input.title);
+      } catch (err) {
+        // A provision failure (e.g. `git worktree add`) must NOT leave the task stuck at the
+        // default "running" status (it would be unrecoverable now that resume is gone) or
+        // escape as an unhandled rejection. Mark it blocked — persist-before-return.
+        this.store.appendEvent({
+          taskId: task.id,
+          type: "error",
+          payload: { message: `provision failed: ${err instanceof Error ? err.message : String(err)}` },
+        });
+        this.store.updateTask(task.id, { status: "blocked", currentPhase: "session" });
+        return this.requireTask(task.id);
+      }
       this.store.updateTask(task.id, {
         worktreePath: result.worktree.worktreePath,
         branch: result.worktree.branch,

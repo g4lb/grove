@@ -64,6 +64,17 @@ test("a failing teardown still completes the task to done (does not propagate, n
   expect(done.status).toBe("done");
 });
 
+test("a provision failure leaves the task blocked, not stuck running (and never throws)", async () => {
+  class ThrowingProvisionInfra extends FakeTaskInfra {
+    async provision(): Promise<never> {
+      throw new Error("git worktree add failed");
+    }
+  }
+  const { engine } = buildEngine(ok(), { infra: new ThrowingProvisionInfra() });
+  const t = await engine.startTask(startInput()); // must resolve, not reject
+  expect(t.status).toBe("blocked"); // not the default "running"
+});
+
 test("a git error verifying commits does not escape — the task is blocked (not stuck running)", async () => {
   class ThrowingCommitCheckInfra extends FakeTaskInfra {
     async committedChanges(): Promise<boolean> {
