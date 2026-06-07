@@ -18,3 +18,8 @@ test("formula installs the binary as `grove` and tells the user to run install-r
   expect(FORMULA).toMatch(/bin\.install.*=> "grove"/);
   expect(FORMULA.toLowerCase()).toContain("install-runtime");
 });
+
+test("formula test asserts the binary against the formula version, not a hardcoded literal", () => {
+  expect(FORMULA).toMatch(/assert_match version\.to_s/);
+  expect(FORMULA).not.toMatch(/assert_match "\d+\.\d+\.\d+"/);
+});

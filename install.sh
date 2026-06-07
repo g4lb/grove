@@ -52,8 +52,11 @@ expected="$(grep " $ASSET\$" "$tmp/SHASUMS256.txt" | awk '{print $1}')"
 if [ -z "$expected" ]; then echo "grove: no checksum found for $ASSET" >&2; exit 1; fi
 if command -v sha256sum >/dev/null 2>&1; then
   actual="$(sha256sum "$tmp/grove" | awk '{print $1}')"
-else
+elif command -v shasum >/dev/null 2>&1; then
   actual="$(shasum -a 256 "$tmp/grove" | awk '{print $1}')"
+else
+  echo "grove: no SHA-256 tool found (need sha256sum or shasum) to verify the download" >&2
+  exit 1
 fi
 if [ "$expected" != "$actual" ]; then
   echo "grove: checksum mismatch for $ASSET" >&2

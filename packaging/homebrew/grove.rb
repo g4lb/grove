@@ -39,6 +39,8 @@ class Grove < Formula
   end
 
   test do
-    assert_match "0.0.1", shell_output("#{bin}/grove --version")
+    # The release process bumps `version` to the tag and grove's VERSION together,
+    # so the binary reports the formula version — assert against it, not a literal.
+    assert_match version.to_s, shell_output("#{bin}/grove --version")
   end
 end
