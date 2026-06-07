@@ -13,6 +13,7 @@ function deps(over: Partial<ResolveSuperpowersDeps> = {}): ResolveSuperpowersDep
     fileExists: () => false,
     readText: () => null,
     gitClone: async () => {},
+    rmDir: async () => {},
     out: () => {},
     ...over,
   };
@@ -48,6 +49,20 @@ test("fetches into grove's plugins dir when nothing is installed", async () => {
   expect(cloned[0]!.url).toContain("github.com/obra/superpowers");
   expect(cloned[0]!.dest).toBe("/home/.grove/plugins/superpowers");
   expect(p).toBe("/home/.grove/plugins/superpowers");
+});
+
+test("clears a stale plugin dir (rmDir) BEFORE cloning, to survive an interrupted prior clone", async () => {
+  const order: string[] = [];
+  let done = false;
+  await resolveSuperpowers(deps({
+    rmDir: async (p) => { order.push(`rmDir:${p}`); },
+    gitClone: async (_url, dest) => { order.push(`gitClone:${dest}`); done = true; },
+    fileExists: (x) => done && x === manifest("/home/.grove/plugins/superpowers"),
+  }));
+  expect(order).toEqual([
+    "rmDir:/home/.grove/plugins/superpowers",
+    "gitClone:/home/.grove/plugins/superpowers",
+  ]);
 });
 
 test("throws a clear error if the fetched plugin is still invalid", async () => {

@@ -11,6 +11,8 @@ export interface ResolveSuperpowersDeps {
   fileExists: (path: string) => boolean;
   readText: (path: string) => string | null;
   gitClone: (url: string, dest: string) => Promise<void>;
+  /** Recursively remove a dir (idempotent — no-op if absent). */
+  rmDir: (path: string) => Promise<void>;
   out: (line: string) => void;
 }
 
@@ -41,6 +43,10 @@ export async function resolveSuperpowers(deps: ResolveSuperpowersDeps): Promise<
   if (isValidPlugin(groveCopy, deps.fileExists)) return groveCopy;
 
   deps.out("fetching the superpowers skills (one-time)…");
+  // Clear any stale partial dir first: an interrupted earlier clone can leave a non-empty
+  // dir without a manifest, which makes `git clone` fail with "destination path already
+  // exists". rmDir is idempotent (no-op if absent), so this is safe on a clean machine too.
+  await deps.rmDir(groveCopy);
   await deps.gitClone(SUPERPOWERS_REPO, groveCopy);
   if (!isValidPlugin(groveCopy, deps.fileExists)) {
     throw new Error(`failed to install superpowers into ${groveCopy}`);

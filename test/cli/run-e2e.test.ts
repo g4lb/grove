@@ -62,6 +62,7 @@ maybe("runs a trivial task as one autonomous session -> done/blocked against the
       const proc = Bun.spawn(["git", "clone", "--depth", "1", url, dest], { stdout: "pipe", stderr: "pipe" });
       if ((await proc.exited) !== 0) throw new Error("git clone failed");
     },
+    rmDir: async (p) => rmSync(p, { recursive: true, force: true }),
     out: () => {},
   });
 

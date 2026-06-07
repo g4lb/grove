@@ -5,7 +5,7 @@ import { runInit } from "./init.ts";
 import { resolvePaths } from "../config/paths.ts";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync, rmSync } from "node:fs";
 import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
 import { installRuntime, detectLibc, platformPackage } from "../runtime/fetch-claude.ts";
 import { runInstallRuntime } from "./install-runtime.ts";
@@ -57,6 +57,9 @@ async function resolveSuperpowersPath(paths: GrovePaths, out: (line: string) => 
         const err = await new Response(proc.stderr).text();
         throw new Error(`git clone failed: ${err.trim()}`);
       }
+    },
+    rmDir: async (p) => {
+      rmSync(p, { recursive: true, force: true });
     },
     out,
   });
