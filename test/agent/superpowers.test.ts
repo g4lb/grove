@@ -1,5 +1,9 @@
 import { test, expect } from "bun:test";
-import { resolveSuperpowers, type ResolveSuperpowersDeps } from "../../src/agent/superpowers.ts";
+import { resolveSuperpowers, SUPERPOWERS_REF, type ResolveSuperpowersDeps } from "../../src/agent/superpowers.ts";
+
+test("the fetch ref is pinned to a specific version tag (not an unpinned branch)", () => {
+  expect(SUPERPOWERS_REF).toMatch(/^v\d+\.\d+\.\d+$/);
+});
 
 function deps(over: Partial<ResolveSuperpowersDeps> = {}): ResolveSuperpowersDeps {
   return {

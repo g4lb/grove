@@ -22,7 +22,7 @@ import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
 import { resolveClaudePath } from "../agent/claude-binary.ts";
 import { detectUsableCredential } from "../agent/credentials.ts";
-import { resolveSuperpowers } from "../agent/superpowers.ts";
+import { resolveSuperpowers, SUPERPOWERS_REF } from "../agent/superpowers.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
 import { runTask } from "./run-driver.ts";
 import type { GrovePaths } from "../config/paths.ts";
@@ -52,7 +52,7 @@ async function resolveSuperpowersPath(paths: GrovePaths, out: (line: string) => 
     fileExists: existsSync,
     readText: (p) => (existsSync(p) ? readFileSync(p, "utf8") : null),
     gitClone: async (url, dest) => {
-      const proc = Bun.spawn(["git", "clone", "--depth", "1", url, dest], { stdout: "pipe", stderr: "pipe" });
+      const proc = Bun.spawn(["git", "clone", "--depth", "1", "--branch", SUPERPOWERS_REF, url, dest], { stdout: "pipe", stderr: "pipe" });
       if ((await proc.exited) !== 0) {
         const err = await new Response(proc.stderr).text();
         throw new Error(`git clone failed: ${err.trim()}`);
@@ -216,7 +216,12 @@ async function main(argv: string[]): Promise<number> {
         const isGitRepo = await git.isGitRepo();
         let superpowersPath = "";
         if (hasCredential && hasClaudeRuntime && isGitRepo) {
-          superpowersPath = await resolveSuperpowersPath(paths, (line) => console.log(line));
+          try {
+            superpowersPath = await resolveSuperpowersPath(paths, (line) => console.log(line));
+          } catch (err) {
+            console.log(`could not set up superpowers skills: ${err instanceof Error ? err.message : String(err)}`);
+            return 1;
+          }
         }
 
         const result = await runTask(prose, {

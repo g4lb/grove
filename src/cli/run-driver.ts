@@ -41,6 +41,9 @@ export async function runTask(prose: string, deps: RunDeps): Promise<RunResult> 
   if (!deps.isGitRepo) {
     return { ok: false, message: "not a git repository — run grove from inside your project" };
   }
+  if (!deps.superpowersPath) {
+    return { ok: false, message: "superpowers skills unavailable — check your network and retry" };
+  }
 
   // 2. Disk gate.
   const free = await deps.disk.freeBytes(deps.paths.root);

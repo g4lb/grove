@@ -57,6 +57,15 @@ test("fails fast with no credential (never provisions)", async () => {
   expect(started).toBe(false);
 });
 
+test("fails fast (clean message) when superpowers is unavailable (never provisions)", async () => {
+  let started = false;
+  const e: RunEngine = { async startTask() { started = true; return task({}); } };
+  const res = await runTask("add a page", deps({ superpowersPath: "", engine: e }));
+  expect(res.ok).toBe(false);
+  expect(res.message.toLowerCase()).toContain("superpowers");
+  expect(started).toBe(false);
+});
+
 test("fails fast when the claude runtime is missing", async () => {
   let started = false;
   const e: RunEngine = { async startTask() { started = true; return task({}); } };

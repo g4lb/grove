@@ -1,6 +1,8 @@
 import { join } from "node:path";
 
 const SUPERPOWERS_REPO = "https://github.com/obra/superpowers.git";
+/** Pinned tag the fetcher clones — never track an unpinned branch (the plugin runs with bypassPermissions + your creds). */
+export const SUPERPOWERS_REF = "v5.1.0";
 
 export interface ResolveSuperpowersDeps {
   env: Record<string, string | undefined>;
