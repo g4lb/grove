@@ -9,9 +9,32 @@ function deps(over: Partial<InstallRuntimeCliDeps> = {}): InstallRuntimeCliDeps 
     runtimeDir: "/home/.grove/runtime",
     install: async () => ({ path: "/home/.grove/runtime/claude", skipped: false }),
     out: () => {},
+    existing: null,
+    force: false,
+    envOverride: null,
     ...over,
   };
 }
+
+test("--force warns when GROVE_CLAUDE_PATH is set (it shadows the pinned install at runtime)", async () => {
+  let installed = false;
+  const lines: string[] = [];
+  const code = await runInstallRuntime(
+    deps({
+      force: true,
+      existing: "/env/claude",
+      envOverride: "/env/claude",
+      install: async () => {
+        installed = true;
+        return { path: "/home/.grove/runtime/claude", skipped: false };
+      },
+      out: (l) => lines.push(l),
+    }),
+  );
+  expect(code).toBe(0);
+  expect(installed).toBe(true); // --force still installs the pinned build
+  expect(lines.join("\n")).toContain("GROVE_CLAUDE_PATH");
+});
 
 test("returns 0 and reports success on a supported platform", async () => {
   const lines: string[] = [];
@@ -63,4 +86,40 @@ test("passes the detected libc through to the platform (musl linux)", async () =
   }));
   expect(code).toBe(0);
   expect(received as { os: string; arch: string; libc?: string } | null).toEqual({ os: "linux", arch: "x64", libc: "musl" });
+});
+
+test("reuses an existing claude and skips the download by default", async () => {
+  let installed = false;
+  const lines: string[] = [];
+  const code = await runInstallRuntime(deps({
+    existing: "/usr/local/bin/claude",
+    force: false,
+    install: async () => { installed = true; return { path: "x", skipped: false }; },
+    out: (l) => lines.push(l),
+  }));
+  expect(code).toBe(0);
+  expect(installed).toBe(false);
+  expect(lines.join("\n").toLowerCase()).toContain("existing");
+  expect(lines.join("\n").toLowerCase()).toContain("/usr/local/bin/claude");
+});
+
+test("--force installs the pinned binary even when an existing claude is present", async () => {
+  let installed = false;
+  const code = await runInstallRuntime(deps({
+    existing: "/usr/local/bin/claude",
+    force: true,
+    install: async () => { installed = true; return { path: "/r/claude", skipped: false }; },
+  }));
+  expect(code).toBe(0);
+  expect(installed).toBe(true);
+});
+
+test("with no existing claude, it installs as before", async () => {
+  let installed = false;
+  const code = await runInstallRuntime(deps({
+    existing: null,
+    install: async () => { installed = true; return { path: "/r/claude", skipped: false }; },
+  }));
+  expect(code).toBe(0);
+  expect(installed).toBe(true);
 });

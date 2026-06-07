@@ -86,7 +86,7 @@ case ":$PATH:" in
     ;;
 esac
 
-echo "grove: fetching the claude runtime (~225 MB, this can take a minute)…"
+echo "grove: setting up the claude runtime…"
 "$BIN_DIR/grove" install-runtime || echo "grove: run 'grove install-runtime' later to finish setup"
 
 echo "grove: done. Run 'grove' to start."
