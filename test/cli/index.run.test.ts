@@ -24,6 +24,8 @@ test("grove run with no Anthropic credential fails fast with a clear message", a
       GROVE_HOME: root,
       ANTHROPIC_API_KEY: "",
       CLAUDE_CODE_OAUTH_TOKEN: "",
+      // This dev machine is logged into Claude Code; force "no credential" deterministically.
+      GROVE_DISABLE_CLAUDE_LOGIN_DETECTION: "1",
     });
     expect(code).toBe(1);
     expect(stdout.toLowerCase()).toContain("credential");

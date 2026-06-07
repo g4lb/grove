@@ -24,10 +24,20 @@ test("doctor passes the credential check when ANTHROPIC_API_KEY is set", async (
 });
 
 test("doctor fails the credential check when no credential is set", async () => {
-  const report = await runDoctor(allTools, {});
+  // Inject login probes that return false so the real keychain (which is logged
+  // into Claude Code on dev machines) doesn't make this non-deterministic.
+  const report = await runDoctor(allTools, {}, [], { fileExists: () => false, keychainHasLogin: () => false });
   const cred = report.checks.find((c) => c.name === "anthropic credential")!;
   expect(cred.ok).toBe(false);
   expect(report.ok).toBe(false);
+  expect(cred.detail).toContain("claude login");
+});
+
+test("doctor passes the credential check when logged into Claude Code", async () => {
+  const report = await runDoctor(allTools, {}, [], { fileExists: () => false, keychainHasLogin: () => true });
+  const cred = report.checks.find((c) => c.name === "anthropic credential")!;
+  expect(cred.ok).toBe(true);
+  expect(cred.detail).toContain("claude_code_login");
 });
 
 test("runDoctor still works without an env argument (defaults to process.env)", async () => {
