@@ -45,6 +45,13 @@ function grovePaths() {
 async function launchTui(): Promise<number> {
   const paths = grovePaths();
   mkdirSync(paths.tasksDir, { recursive: true });
+  const runner = new BunCommandRunner();
+  const repoPath = process.cwd();
+  const git = new GitRunner(runner, repoPath);
+  if (!(await git.isGitRepo())) {
+    console.log("not a git repository — run grove from inside your project (or `git init` first)");
+    return 1;
+  }
   if (!detectUsableCredential(process.env).present) {
     console.log("no Anthropic credential — run `claude login`, or set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
     return 1;
@@ -55,11 +62,8 @@ async function launchTui(): Promise<number> {
     console.log("claude runtime not installed — run `grove install-runtime`");
     return 1;
   }
-  const runner = new BunCommandRunner();
-  const repoPath = process.cwd();
   const config = await loadConfig(paths);
   const store = SqliteStore.open(paths.dbFile);
-  const git = new GitRunner(runner, repoPath);
   const worktrees = new GitWorktreeManager(git, paths);
   const compose = new DockerComposeManager(new DockerRunner(runner));
   const infra = new InfraManager(worktrees, compose);
