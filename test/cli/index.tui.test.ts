@@ -33,3 +33,22 @@ test("grove with no args and no credential fails fast (does not launch the TUI)"
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("grove (TUI) outside a git repo fails fast with a clear message (not a raw git error)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "grove-nogit-"));
+  try {
+    const proc = Bun.spawn(["bun", ENTRY], {
+      cwd: dir, // a fresh temp dir, not a git repo
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+      env: { ...process.env, GROVE_HOME: join(dir, ".grove") },
+    });
+    const stdout = await new Response(proc.stdout).text();
+    const code = await proc.exited;
+    expect(code).toBe(1);
+    expect(stdout.toLowerCase()).toContain("git repository");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
