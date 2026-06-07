@@ -24,7 +24,6 @@ export function migrate(db: Database): void {
       phase TEXT NOT NULL,
       state TEXT NOT NULL,
       summary TEXT,
-      artifact_path TEXT,
       started_at TEXT,
       ended_at TEXT
     );

@@ -1,11 +1,6 @@
-export type TaskKind = "task" | "issue";
+export type TaskKind = "task";
 
-export type TaskStatus =
-  | "running"
-  | "waiting_confirm"
-  | "blocked"
-  | "done"
-  | "stopped";
+export type TaskStatus = "running" | "blocked" | "done" | "stopped";
 
 /** A task runs as a single autonomous session; the store keeps one phase row per task. */
 export type Phase = "session";
@@ -33,7 +28,6 @@ export interface PhaseRun {
   phase: Phase;
   state: PhaseState;
   summary: string | null;
-  artifactPath: string | null;
   startedAt: string | null;
   endedAt: string | null;
 }

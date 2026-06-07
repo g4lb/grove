@@ -31,15 +31,15 @@ test("updateTask applies a patch and bumps updatedAt", () => {
   const store = makeStore(() => `2026-06-06T00:00:0${t++}.000Z`);
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/repo" });
   const updated = store.updateTask(task.id, {
-    status: "waiting_confirm",
+    status: "blocked",
     worktreePath: "/repo/.grove/wt",
     branch: "grove/abc",
   });
-  expect(updated.status).toBe("waiting_confirm");
+  expect(updated.status).toBe("blocked");
   expect(updated.worktreePath).toBe("/repo/.grove/wt");
   expect(updated.branch).toBe("grove/abc");
   expect(updated.updatedAt).not.toBe(task.updatedAt);
-  expect(store.getTask(task.id)?.status).toBe("waiting_confirm");
+  expect(store.getTask(task.id)?.status).toBe("blocked");
   store.close();
 });
 

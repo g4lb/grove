@@ -17,7 +17,7 @@ const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["done", "stopped"
 /**
  * Given candidate task ids discovered on disk / as compose projects, return the ids
  * that are safe to reclaim: those absent from the store, or in a terminal state.
- * Never reclaims running / waiting_confirm / blocked tasks.
+ * Never reclaims running / blocked tasks.
  */
 export function findOrphans(candidateIds: string[], lookup: TaskStatusLookup): string[] {
   const seen = new Set<string>();

@@ -24,12 +24,10 @@ test("updatePhaseRun applies a patch", () => {
   const updated = store.updatePhaseRun(run.id, {
     state: "succeeded",
     summary: "design done",
-    artifactPath: "/r/design.md",
     endedAt: "2026-06-06T01:00:00.000Z",
   });
   expect(updated.state).toBe("succeeded");
   expect(updated.summary).toBe("design done");
-  expect(updated.artifactPath).toBe("/r/design.md");
   expect(updated.endedAt).toBe("2026-06-06T01:00:00.000Z");
   store.close();
 });

@@ -38,7 +38,6 @@ export interface CreatePhaseRunInput {
 export interface PhaseRunPatch {
   state?: PhaseState;
   summary?: string | null;
-  artifactPath?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
 }
