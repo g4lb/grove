@@ -1,5 +1,5 @@
 /** Minimal provision result the engine needs (the real InfraManager.ProvisionResult satisfies this). */
-export interface ProvisionedWorktree {
+interface ProvisionedWorktree {
   taskId: string;
   worktreePath: string;
   branch: string;

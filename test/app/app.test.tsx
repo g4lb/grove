@@ -1,5 +1,4 @@
 import { test, expect } from "bun:test";
-import React from "react";
 import { render } from "ink-testing-library";
 import { App } from "../../src/app/app.tsx";
 import type { ControllerView } from "../../src/app/controller.ts";

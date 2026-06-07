@@ -83,7 +83,7 @@ export async function runGc(deps: GcDeps): Promise<GcReport> {
  * Enumerate candidate task ids from on-disk worktree dirs and grove- compose projects.
  * Used to build the real GcDeps; kept separate so runGc stays unit-testable.
  */
-export async function discoverTaskIds(paths: GrovePaths, docker: DockerRunner): Promise<string[]> {
+async function discoverTaskIds(paths: GrovePaths, docker: DockerRunner): Promise<string[]> {
   const ids = new Set<string>();
 
   if (existsSync(paths.tasksDir)) {

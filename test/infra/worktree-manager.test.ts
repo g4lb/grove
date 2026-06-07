@@ -17,7 +17,7 @@ const OK = (stdout = ""): CommandResult => ({ code: 0, stdout, stderr: "" });
 
 test("create() makes a worktree on a grove/<id>-<slug> branch off HEAD", async () => {
   const paths = resolvePaths("/groveroot");
-  const runner = new ScriptedRunner((args) => OK());
+  const runner = new ScriptedRunner(() => OK());
   const git = new GitRunner(runner, "/repo");
   const mgr = new GitWorktreeManager(git, paths);
 

@@ -53,7 +53,7 @@ test("queryTasks returns all, newest first, and filters by status", () => {
   let t = 0;
   const store = makeStore(() => `2026-06-06T00:00:0${t++}.000Z`);
   const a = store.createTask({ title: "a", kind: "task", repoPath: "/r" });
-  const b = store.createTask({ title: "b", kind: "task", repoPath: "/r" });
+  store.createTask({ title: "b", kind: "task", repoPath: "/r" });
   store.updateTask(a.id, { status: "done" });
   const all = store.queryTasks();
   expect(all.length).toBe(2);

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-export const SUPERPOWERS_REPO = "https://github.com/obra/superpowers.git";
+const SUPERPOWERS_REPO = "https://github.com/obra/superpowers.git";
 
 export interface ResolveSuperpowersDeps {
   env: Record<string, string | undefined>;

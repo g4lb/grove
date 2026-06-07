@@ -7,7 +7,7 @@ export interface ControllerEngine {
   startTask(input: StartTaskInput, onEvent?: (e: AgentEvent) => void): Promise<Task>;
 }
 
-export type RunState = "idle" | "running" | "blocked" | "done" | "stopped";
+type RunState = "idle" | "running" | "blocked" | "done" | "stopped";
 
 export interface ControllerView {
   mode: "prompt" | "list";

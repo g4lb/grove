@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolvePaths } from "../../src/config/paths.ts";
-import { loadConfig, saveConfig, DEFAULT_CONFIG } from "../../src/config/config.ts";
+import { loadConfig, DEFAULT_CONFIG } from "../../src/config/config.ts";
 
 function tempPaths() {
   return resolvePaths(mkdtempSync(join(tmpdir(), "grove-")));

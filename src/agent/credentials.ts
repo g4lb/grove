@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-export type CredentialKind = "api_key" | "oauth_token" | "claude_code_login" | "none";
+type CredentialKind = "api_key" | "oauth_token" | "claude_code_login" | "none";
 
 export interface CredentialInfo {
   present: boolean;
