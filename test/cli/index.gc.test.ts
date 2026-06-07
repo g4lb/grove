@@ -27,7 +27,7 @@ test("grove gc --yes runs and reports (no orphans on a fresh home)", async () =>
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
-});
+}, 30000); // spawns `grove gc` → bun cold-start + docker discovery; generous timeout for cold CI runners
 
 test("grove gc works against a never-initialized GROVE_HOME (creates the home)", async () => {
   // A GROVE_HOME that does not exist at all — gc must create it (mkdir + db)
@@ -40,4 +40,4 @@ test("grove gc works against a never-initialized GROVE_HOME (creates the home)",
   } finally {
     rmSync(join(root, "..", ".."), { recursive: true, force: true });
   }
-});
+}, 30000); // spawns `grove gc` → bun cold-start + docker discovery; generous timeout for cold CI runners
