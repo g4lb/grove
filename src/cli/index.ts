@@ -22,10 +22,10 @@ import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
 import { resolveClaudePath } from "../agent/claude-binary.ts";
 import { detectUsableCredential } from "../agent/credentials.ts";
-import { HeuristicRouter } from "../engine/router.ts";
+import { resolveSuperpowers } from "../agent/superpowers.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
 import { runTask } from "./run-driver.ts";
-import { stdinGateDecider } from "./gate-prompt.ts";
+import type { GrovePaths } from "../config/paths.ts";
 import React from "react";
 import { render } from "ink";
 import { App } from "../app/app.tsx";
@@ -34,12 +34,32 @@ import { TaskRunController } from "../app/controller.ts";
 const VERSION = "0.1.2";
 
 function printUsage(): void {
-  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | install-runtime | --version]');
+  console.log('grove — usage: grove [run "<prose>" | init | gc [--yes] | doctor | install-runtime | --version]');
 }
 
 function grovePaths() {
   const root = process.env.GROVE_HOME ?? join(homedir(), ".grove");
   return resolvePaths(root);
+}
+
+/** Resolve (or one-time fetch) the obra/superpowers plugin, wired to the real filesystem/git. */
+async function resolveSuperpowersPath(paths: GrovePaths, out: (line: string) => void): Promise<string> {
+  const claudeConfigDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+  return resolveSuperpowers({
+    env: process.env,
+    grovePluginsDir: join(paths.root, "plugins"),
+    installedPluginsJsonPath: join(claudeConfigDir, "plugins", "installed_plugins.json"),
+    fileExists: existsSync,
+    readText: (p) => (existsSync(p) ? readFileSync(p, "utf8") : null),
+    gitClone: async (url, dest) => {
+      const proc = Bun.spawn(["git", "clone", "--depth", "1", url, dest], { stdout: "pipe", stderr: "pipe" });
+      if ((await proc.exited) !== 0) {
+        const err = await new Response(proc.stderr).text();
+        throw new Error(`git clone failed: ${err.trim()}`);
+      }
+    },
+    out,
+  });
 }
 
 async function launchTui(): Promise<number> {
@@ -69,7 +89,15 @@ async function launchTui(): Promise<number> {
   const infra = new InfraManager(worktrees, compose);
   const agent = new SdkAgentRunner({ env: process.env, claudePath });
   const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
-  const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
+  let superpowersPath: string;
+  try {
+    superpowersPath = await resolveSuperpowersPath(paths, (line) => console.log(line));
+  } catch (err) {
+    console.log(`could not set up superpowers skills: ${err instanceof Error ? err.message : String(err)}`);
+    store.close();
+    return 1;
+  }
+  const controller = new TaskRunController(engine, repoPath, superpowersPath);
   controller.setLister(() => engine.listTasks());
 
   try {
@@ -160,10 +188,9 @@ async function main(argv: string[]): Promise<number> {
       }
     }
     case "run": {
-      const yes = argv.includes("--yes");
       const prose = argv.slice(3).filter((a) => !a.startsWith("--")).join(" ").trim();
       if (prose.length === 0) {
-        console.log('grove — usage: grove run "<what you want to do>" [--yes]');
+        console.log('grove — usage: grove run "<what you want to do>"');
         return 0;
       }
 
@@ -183,18 +210,25 @@ async function main(argv: string[]): Promise<number> {
         const agent = new SdkAgentRunner({ env: process.env, claudePath });
         const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
 
+        // Prechecks before the one-time superpowers fetch (which may hit the network).
+        const hasCredential = detectUsableCredential(process.env).present;
+        const hasClaudeRuntime = claudePath !== null;
+        const isGitRepo = await git.isGitRepo();
+        let superpowersPath = "";
+        if (hasCredential && hasClaudeRuntime && isGitRepo) {
+          superpowersPath = await resolveSuperpowersPath(paths, (line) => console.log(line));
+        }
+
         const result = await runTask(prose, {
           engine,
-          router: new HeuristicRouter(),
           disk: new ShellDiskMonitor(runner),
           thresholds: config.disk,
           paths,
           repoPath,
-          hasCredential: detectUsableCredential(process.env).present,
-          hasClaudeRuntime: claudePath !== null,
-          isGitRepo: await git.isGitRepo(),
-          yes,
-          decide: () => stdinGateDecider(async (p) => prompt(p) ?? ""),
+          hasCredential,
+          hasClaudeRuntime,
+          isGitRepo,
+          superpowersPath,
           out: (line) => console.log(line),
         });
 

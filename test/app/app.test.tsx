@@ -3,7 +3,6 @@ import React from "react";
 import { render } from "ink-testing-library";
 import { App } from "../../src/app/app.tsx";
 import type { ControllerView } from "../../src/app/controller.ts";
-import type { GateDecision } from "../../src/engine/task-engine.ts";
 
 function spyController(view: ControllerView) {
   return {
@@ -11,7 +10,6 @@ function spyController(view: ControllerView) {
     onChange: () => {},
     starts: [] as string[],
     submits: [] as string[],
-    decisions: [] as GateDecision[],
     snapshot() {
       return this.view;
     },
@@ -20,9 +18,6 @@ function spyController(view: ControllerView) {
     },
     async submit(s: string) {
       this.submits.push(s);
-    },
-    async decide(d: GateDecision) {
-      this.decisions.push(d);
     },
   };
 }
@@ -48,13 +43,13 @@ test("typing a request and pressing enter calls controller.submit", async () => 
   expect(c.submits).toContain("add a settings page");
 });
 
-test("renders the feed and the gate action bar at a gate", () => {
+test("renders the live feed while running", () => {
   const c = spyController({
     mode: "prompt",
-    state: "waiting_confirm",
+    state: "running",
     task: null,
     feed: ["· Write", "· Edit"],
-    message: "gate — brainstorm done",
+    message: "",
     tasks: [],
     selected: 0,
     viewing: false,
@@ -62,28 +57,13 @@ test("renders the feed and the gate action bar at a gate", () => {
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
   expect(frame).toContain("· Write");
-  expect(frame).toContain("brainstorm done");
-  expect(frame.toLowerCase()).toContain("approve");
+  expect(frame.toLowerCase()).toContain("working");
 });
 
-test("pressing 'a' at a gate approves", async () => {
-  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0, viewing: false });
-  const { stdin } = render(<App controller={c as any} />);
-  stdin.write("a");
-  await delay();
-  expect(c.decisions).toContainEqual({ kind: "approve" });
-});
-
-test("pressing 's' at a gate stops", async () => {
-  const c = spyController({ mode: "prompt", state: "waiting_confirm", task: null, feed: [], message: "gate", tasks: [], selected: 0, viewing: false });
-  const { stdin } = render(<App controller={c as any} />);
-  stdin.write("s");
-  await delay();
-  expect(c.decisions).toContainEqual({ kind: "stop" });
-});
-
-test("renders a quit hint on a terminal state", () => {
-  const c = spyController({ mode: "prompt", state: "done", task: null, feed: [], message: "task complete", tasks: [], selected: 0, viewing: false });
+test("renders the done message and a quit hint on a terminal state", () => {
+  const c = spyController({ mode: "prompt", state: "done", task: null, feed: [], message: "done — branch grove/t is ready", tasks: [], selected: 0, viewing: false });
   const { lastFrame } = render(<App controller={c as any} />);
-  expect((lastFrame() ?? "").toLowerCase()).toContain("quit");
+  const frame = lastFrame() ?? "";
+  expect(frame).toContain("done — branch grove/t is ready");
+  expect(frame.toLowerCase()).toContain("quit");
 });

@@ -1,8 +1,6 @@
 import { test, expect } from "bun:test";
 import { TaskRunController, type ControllerEngine } from "../../src/app/controller.ts";
-import { HeuristicRouter } from "../../src/engine/router.ts";
 import type { Task } from "../../src/domain/types.ts";
-import type { GateDecision } from "../../src/engine/task-engine.ts";
 
 function task(over: Partial<Task>): Task {
   return {
@@ -11,7 +9,7 @@ function task(over: Partial<Task>): Task {
     description: null,
     kind: "task",
     status: "done",
-    currentPhase: "finish",
+    currentPhase: "session",
     repoPath: "/r",
     worktreePath: "/wt",
     branch: "grove/task_1",
@@ -26,13 +24,10 @@ const noEngine: ControllerEngine = {
   async startTask() {
     throw new Error("should not run");
   },
-  async confirmGate() {
-    throw new Error("should not run");
-  },
 };
 
 function ctl(tasks: Task[], engine: ControllerEngine = noEngine) {
-  const c = new TaskRunController(engine, new HeuristicRouter(), "/repo");
+  const c = new TaskRunController(engine, "/repo", "/sp");
   c.setLister(() => tasks);
   return c;
 }
@@ -62,19 +57,18 @@ test("selectDown/selectUp move the selection within bounds", async () => {
 });
 
 test("openSelected opens the highlighted task into the run view", async () => {
-  const t = task({ id: "task_42", title: "build it", status: "waiting_confirm", currentPhase: "plan" });
+  const t = task({ id: "task_42", title: "build it", status: "blocked" });
   const c = ctl([t]);
   await c.submit("/list");
   c.openSelected();
   const v = c.snapshot();
   expect(v.mode).toBe("prompt");
   expect(v.task?.id).toBe("task_42");
-  expect(v.state).toBe("waiting_confirm");
-  expect(v.message.toLowerCase()).toContain("plan");
+  expect(v.state).toBe("blocked");
 });
 
 test("submit('/open <id>') opens that task directly", async () => {
-  const t = task({ id: "task_7", title: "seven", status: "blocked", currentPhase: "execute" });
+  const t = task({ id: "task_7", title: "seven", status: "blocked" });
   const c = ctl([t]);
   await c.submit("/open task_7");
   const v = c.snapshot();
@@ -103,42 +97,17 @@ test("submit(prose) runs it as a task (not a command)", async () => {
   const engine: ControllerEngine = {
     async startTask() {
       started = true;
-      return task({ id: "task_1", status: "waiting_confirm", currentPhase: "brainstorm" });
-    },
-    async confirmGate() {
-      return task({});
+      return task({ id: "task_1", status: "done" });
     },
   };
   const c = ctl([], engine);
   await c.submit("add a settings page");
   expect(started).toBe(true);
-  expect(c.snapshot().state).toBe("waiting_confirm");
-});
-
-test("start is a no-op while already running (guard covers the classify await)", async () => {
-  let calls = 0;
-  let release: (() => void) | null = null;
-  const gate = new Promise<void>((r) => (release = r));
-  const engine: ControllerEngine = {
-    async startTask() {
-      calls++;
-      await gate;
-      return task({ id: "task_1", status: "waiting_confirm", currentPhase: "brainstorm" });
-    },
-    async confirmGate() {
-      return task({});
-    },
-  };
-  const c = ctl([], engine);
-  const p1 = c.submit("add a page");
-  const p2 = c.submit("add a page again");
-  release!();
-  await Promise.all([p1, p2]);
-  expect(calls).toBe(1);
+  expect(c.snapshot().state).toBe("done");
 });
 
 test("opening a task marks the view as 'viewing'", async () => {
-  const c = ctl([task({ id: "task_1", status: "running", currentPhase: "execute" })]);
+  const c = ctl([task({ id: "task_1", status: "running" })]);
   await c.submit("/open task_1");
   expect(c.snapshot().viewing).toBe(true);
 });
@@ -153,10 +122,7 @@ test("backToPrompt clears viewing", async () => {
 test("starting a fresh task is not in viewing mode", async () => {
   const engine: ControllerEngine = {
     async startTask() {
-      return task({ id: "task_1", status: "waiting_confirm", currentPhase: "brainstorm" });
-    },
-    async confirmGate() {
-      return task({});
+      return task({ id: "task_1", status: "done" });
     },
   };
   const c = ctl([], engine);

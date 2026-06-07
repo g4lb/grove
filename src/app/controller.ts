@@ -1,15 +1,13 @@
-import type { Task, TaskKind } from "../domain/types.ts";
+import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
-import type { StartTaskInput, GateDecision } from "../engine/task-engine.ts";
-import type { Router } from "../engine/router.ts";
+import type { StartTaskInput } from "../engine/task-engine.ts";
 
 /** The engine surface the controller needs (the real TaskEngine satisfies it). */
 export interface ControllerEngine {
   startTask(input: StartTaskInput, onEvent?: (e: AgentEvent) => void): Promise<Task>;
-  confirmGate(taskId: string, decision: GateDecision, onEvent?: (e: AgentEvent) => void): Promise<Task>;
 }
 
-export type RunState = "idle" | "running" | "waiting_confirm" | "blocked" | "done" | "stopped";
+export type RunState = "idle" | "running" | "blocked" | "done" | "stopped";
 
 export interface ControllerView {
   mode: "prompt" | "list";
@@ -37,8 +35,8 @@ export class TaskRunController {
 
   constructor(
     private engine: ControllerEngine,
-    private router: Router,
     private repoPath: string,
+    private superpowersPath: string,
   ) {}
 
   snapshot(): ControllerView {
@@ -62,25 +60,12 @@ export class TaskRunController {
 
   async start(prose: string): Promise<void> {
     if (this.view.state === "running") return;
-    this.set({ state: "running", viewing: false });
+    this.set({ state: "running", message: "", feed: [], viewing: false, task: null });
     try {
-      const routed = await this.router.classify(prose);
-      this.push(`detected: ${routed.kind}`);
-      const kind: TaskKind = routed.kind === "debug" ? "issue" : "task";
-      if (routed.kind === "debug") this.push("debugging is coming in v1.1 — running as a task");
-      const task = await this.engine.startTask({ title: prose, repoPath: this.repoPath, kind }, this.onEvent);
-      this.applyTask(task);
-    } catch (err) {
-      this.set({ state: "blocked", message: `failed: ${err instanceof Error ? err.message : String(err)}` });
-    }
-  }
-
-  async decide(decision: GateDecision): Promise<void> {
-    if (!this.view.task) return;
-    if (this.view.state === "running") return;
-    try {
-      this.set({ state: "running" });
-      const task = await this.engine.confirmGate(this.view.task.id, decision, this.onEvent);
+      const task = await this.engine.startTask(
+        { title: prose, description: prose, repoPath: this.repoPath, kind: "task", superpowersPath: this.superpowersPath },
+        this.onEvent,
+      );
       this.applyTask(task);
     } catch (err) {
       this.set({ state: "blocked", message: `failed: ${err instanceof Error ? err.message : String(err)}` });
@@ -140,10 +125,9 @@ export class TaskRunController {
 
   private applyTask(task: Task): void {
     let message = "";
-    if (task.status === "waiting_confirm") message = `gate — ${task.currentPhase} done`;
-    else if (task.status === "done") message = "task complete";
-    else if (task.status === "blocked") message = `blocked at ${task.currentPhase}`;
-    else if (task.status === "stopped") message = `stopped at ${task.currentPhase}`;
-    this.set({ state: task.status, task, message });
+    if (task.status === "done") message = `done — branch ${task.branch ?? "?"} is ready`;
+    else if (task.status === "blocked") message = "blocked — the session did not complete";
+    else if (task.status === "stopped") message = "stopped";
+    this.set({ state: task.status as RunState, task, message });
   }
 }
