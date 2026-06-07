@@ -20,11 +20,12 @@ export class GitRunner {
     return this.git(["rev-parse", "HEAD"]);
   }
 
-  /** True if `<worktreePath>` HEAD has at least one commit ahead of `baseSha`. */
-  async committedChanges(worktreePath: string, baseSha: string): Promise<boolean> {
-    // GitRunner injects `-C <repoPath>`; the second absolute `-C <worktreePath>` overrides it
-    // so the count is computed in the task's worktree.
-    const out = await this.git(["-C", worktreePath, "rev-list", "--count", `${baseSha}..HEAD`]);
+  /** True if `<branch>` has at least one commit ahead of `baseSha` (computed in the worktree). */
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    // GitRunner injects `-C <repoPath>`; the second absolute `-C <worktreePath>` overrides it so
+    // the count is computed in the task's worktree. Count against the task branch (not HEAD) so
+    // an agent that wandered onto a different branch can't make an empty `grove/<id>` look done.
+    const out = await this.git(["-C", worktreePath, "rev-list", "--count", `${baseSha}..${branch}`]);
     return Number(out) > 0;
   }
 

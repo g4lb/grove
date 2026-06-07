@@ -180,11 +180,11 @@ export class TaskEngine {
     // the worktree branch having commits ahead of the base it branched from; otherwise leave
     // the worktree in place (no teardown) for inspection and mark the task blocked.
     const gated = this.requireTask(taskId);
-    if (gated.worktreePath) {
+    if (gated.worktreePath && gated.branch) {
       let committed = false;
       let summary = "session finished but committed no changes";
       try {
-        committed = await this.infra.committedChanges(gated.worktreePath, baseSha);
+        committed = await this.infra.committedChanges(gated.worktreePath, gated.branch, baseSha);
       } catch (err) {
         // A git failure verifying commits must NOT escape and leave the task stuck "running"
         // (the persist-before-return invariant). Treat an unverifiable result as not-done.

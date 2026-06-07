@@ -26,7 +26,7 @@ export class InfraManager {
   }
 
   /** True if the session committed at least one change onto the worktree branch. */
-  async committedChanges(worktreePath: string, baseSha: string): Promise<boolean> {
-    return this.worktrees.committedChanges(worktreePath, baseSha);
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    return this.worktrees.committedChanges(worktreePath, branch, baseSha);
   }
 }

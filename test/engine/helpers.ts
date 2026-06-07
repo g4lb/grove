@@ -23,7 +23,7 @@ export class FakeTaskInfra implements TaskInfra {
   async teardown(taskId: string, worktreePath: string): Promise<void> {
     this.toreDown.push({ taskId, worktreePath });
   }
-  async committedChanges(_worktreePath: string, _baseSha: string): Promise<boolean> {
+  async committedChanges(_worktreePath: string, _branch: string, _baseSha: string): Promise<boolean> {
     return this.committed;
   }
 }

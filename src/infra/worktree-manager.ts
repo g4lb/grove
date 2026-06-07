@@ -17,8 +17,8 @@ export interface WorktreeManager {
   remove(taskId: string): Promise<void>;
   list(): Promise<string[]>;
   getDiff(taskId: string): Promise<string>;
-  /** True if the worktree branch has commits ahead of the base SHA it branched from. */
-  committedChanges(worktreePath: string, baseSha: string): Promise<boolean>;
+  /** True if `<branch>` has commits ahead of the base SHA it branched from. */
+  committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean>;
 }
 
 /** Short suffix of a `task_<hex>` id, used in the human-facing branch name. */
@@ -78,8 +78,8 @@ export class GitWorktreeManager implements WorktreeManager {
       .map((line) => line.slice("worktree ".length));
   }
 
-  async committedChanges(worktreePath: string, baseSha: string): Promise<boolean> {
-    return this.git.committedChanges(worktreePath, baseSha);
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    return this.git.committedChanges(worktreePath, branch, baseSha);
   }
 
   async getDiff(taskId: string): Promise<string> {

@@ -46,7 +46,7 @@ test("committedChanges() runs rev-list --count in the worktree dir", async () =>
   const git = new GitRunner(runner, "/repo");
   const mgr = new GitWorktreeManager(git, paths);
 
-  expect(await mgr.committedChanges("/groveroot/tasks/task_1/worktree", "base000")).toBe(true);
+  expect(await mgr.committedChanges("/groveroot/tasks/task_1/worktree", "grove/task_1", "base000")).toBe(true);
   const call = runner.calls.find((a) => a.includes("rev-list"))!;
   expect(call).toEqual([
     "-C",
@@ -55,7 +55,7 @@ test("committedChanges() runs rev-list --count in the worktree dir", async () =>
     "/groveroot/tasks/task_1/worktree",
     "rev-list",
     "--count",
-    "base000..HEAD",
+    "base000..grove/task_1",
   ]);
 });
 
@@ -64,7 +64,7 @@ test("committedChanges() is false when the count is zero", async () => {
   const runner = new ScriptedRunner(() => OK("0"));
   const git = new GitRunner(runner, "/repo");
   const mgr = new GitWorktreeManager(git, paths);
-  expect(await mgr.committedChanges("/wt", "base000")).toBe(false);
+  expect(await mgr.committedChanges("/wt", "grove/x", "base000")).toBe(false);
 });
 
 test("create() throws if git worktree add fails", async () => {

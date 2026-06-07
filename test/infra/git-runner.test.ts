@@ -35,9 +35,9 @@ test("revParseHead returns the trimmed HEAD SHA", async () => {
 
 test("committedChanges is true when the rev-list count is > 0", async () => {
   const yes = new GitRunner(new RecordingRunner({ code: 0, stdout: "3\n", stderr: "" }), "/repo");
-  expect(await yes.committedChanges("/wt", "base000")).toBe(true);
+  expect(await yes.committedChanges("/wt", "grove/x", "base000")).toBe(true);
   const no = new GitRunner(new RecordingRunner({ code: 0, stdout: "0\n", stderr: "" }), "/repo");
-  expect(await no.committedChanges("/wt", "base000")).toBe(false);
+  expect(await no.committedChanges("/wt", "grove/x", "base000")).toBe(false);
 });
 
 test("isGitRepo returns true on exit 0, false otherwise", async () => {

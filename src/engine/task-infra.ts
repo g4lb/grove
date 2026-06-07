@@ -15,6 +15,6 @@ export interface TaskProvisionResult {
 export interface TaskInfra {
   provision(taskId: string, title: string): Promise<TaskProvisionResult>;
   teardown(taskId: string, worktreePath: string): Promise<void>;
-  /** True if the worktree branch has at least one commit ahead of the base SHA it branched from. */
-  committedChanges(worktreePath: string, baseSha: string): Promise<boolean>;
+  /** True if `<branch>` has at least one commit ahead of the base SHA it branched from. */
+  committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean>;
 }
