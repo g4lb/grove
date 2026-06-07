@@ -8,7 +8,8 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "build": "bun scripts/write-sdk-version.ts && bun build ./src/cli/index.ts --compile --outfile dist/grove"
+    "build": "bun scripts/write-sdk-version.ts && bun build ./src/cli/index.ts --compile --outfile dist/grove",
+    "build:all": "bun scripts/write-sdk-version.ts && bun scripts/build-all.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
