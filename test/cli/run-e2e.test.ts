@@ -14,6 +14,7 @@ import { DockerComposeManager } from "../../src/infra/compose-manager.ts";
 import { InfraManager } from "../../src/infra/infra-manager.ts";
 import { ShellDiskMonitor } from "../../src/infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../../src/agent/sdk-agent-runner.ts";
+import { resolveClaudePath } from "../../src/agent/claude-binary.ts";
 import { hasCredentials } from "../../src/agent/credentials.ts";
 import { resolvePaths } from "../../src/config/paths.ts";
 
@@ -47,7 +48,8 @@ maybe("runs a trivial task start -> done with --yes against the real agent", asy
   const git = new GitRunner(runner, repo);
   const store = SqliteStore.open(paths.dbFile);
   const infra = new InfraManager(new GitWorktreeManager(git, paths), new DockerComposeManager(new DockerRunner(runner)));
-  const engine = new TaskEngine({ store, agent: new SdkAgentRunner({ env: process.env }), infra, model: process.env.GROVE_AGENT_MODEL ?? "claude-opus-4-8" });
+  const claudePath = resolveClaudePath({ env: process.env, runtimeDir: join(paths.root, "runtime") });
+  const engine = new TaskEngine({ store, agent: new SdkAgentRunner({ env: process.env, claudePath }), infra, model: process.env.GROVE_AGENT_MODEL ?? "claude-opus-4-8" });
 
   const result = await runTask("add a file hello.txt containing the word hello", {
     engine,
@@ -57,6 +59,7 @@ maybe("runs a trivial task start -> done with --yes against the real agent", asy
     paths,
     repoPath: repo,
     hasCredential: true,
+    hasClaudeRuntime: claudePath !== null,
     isGitRepo: true,
     yes: true,
     decide: async () => ({ kind: "approve" }),

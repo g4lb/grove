@@ -47,6 +47,7 @@ function deps(over: Partial<RunDeps>): RunDeps {
     paths: resolvePaths("/groveroot"),
     repoPath: "/repo",
     hasCredential: true,
+    hasClaudeRuntime: true,
     isGitRepo: true,
     yes: true,
     decide: async () => ({ kind: "approve" }),
@@ -61,6 +62,15 @@ test("fails fast with no credential (never provisions)", async () => {
   const res = await runTask("add a page", deps({ hasCredential: false, engine: e }));
   expect(res.ok).toBe(false);
   expect(res.message.toLowerCase()).toContain("credential");
+  expect(started).toBe(false);
+});
+
+test("fails fast when the claude runtime is missing", async () => {
+  let started = false;
+  const e = { async startTask() { started = true; return task({}); }, async confirmGate() { return task({}); }, subscribe() { return () => {}; } };
+  const res = await runTask("add a page", deps({ hasClaudeRuntime: false, engine: e as any }));
+  expect(res.ok).toBe(false);
+  expect(res.message.toLowerCase()).toContain("install-runtime");
   expect(started).toBe(false);
 });
 

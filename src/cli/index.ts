@@ -5,7 +5,7 @@ import { runInit } from "./init.ts";
 import { resolvePaths } from "../config/paths.ts";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
 import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
 import { installRuntime, detectLibc } from "../runtime/fetch-claude.ts";
 import { runInstallRuntime } from "./install-runtime.ts";
@@ -48,6 +48,12 @@ async function launchTui(): Promise<number> {
     console.log("no Anthropic credential — set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
     return 1;
   }
+  const runtimeDir = join(paths.root, "runtime");
+  const claudePath = resolveClaudePath({ env: process.env, runtimeDir });
+  if (!claudePath) {
+    console.log("claude runtime not installed — run `grove install-runtime`");
+    return 1;
+  }
   const runner = new BunCommandRunner();
   const repoPath = process.cwd();
   const config = await loadConfig(paths);
@@ -56,7 +62,7 @@ async function launchTui(): Promise<number> {
   const worktrees = new GitWorktreeManager(git, paths);
   const compose = new DockerComposeManager(new DockerRunner(runner));
   const infra = new InfraManager(worktrees, compose);
-  const agent = new SdkAgentRunner({ env: process.env });
+  const agent = new SdkAgentRunner({ env: process.env, claudePath });
   const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
   const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
   controller.setLister(() => engine.listTasks());
@@ -167,7 +173,9 @@ async function main(argv: string[]): Promise<number> {
         const worktrees = new GitWorktreeManager(git, paths);
         const compose = new DockerComposeManager(new DockerRunner(runner));
         const infra = new InfraManager(worktrees, compose);
-        const agent = new SdkAgentRunner({ env: process.env });
+        const runtimeDir = join(paths.root, "runtime");
+        const claudePath = resolveClaudePath({ env: process.env, runtimeDir });
+        const agent = new SdkAgentRunner({ env: process.env, claudePath });
         const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
 
         const result = await runTask(prose, {
@@ -178,6 +186,7 @@ async function main(argv: string[]): Promise<number> {
           paths,
           repoPath,
           hasCredential: detectCredentials(process.env).present,
+          hasClaudeRuntime: claudePath !== null,
           isGitRepo: await git.isGitRepo(),
           yes,
           decide: () => stdinGateDecider(async (p) => prompt(p) ?? ""),
@@ -221,6 +230,7 @@ async function main(argv: string[]): Promise<number> {
                 stderr: "pipe",
               });
               if ((await proc.exited) !== 0) throw new Error("failed to extract claude from the tarball");
+              try { unlinkSync(tmp); } catch {}
               return join(destDir, "claude");
             },
             ensureExecutable: (p) => chmodSync(p, 0o755),
