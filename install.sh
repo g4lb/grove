@@ -40,13 +40,14 @@ if [ "$DRY_RUN" -eq 1 ]; then
   exit 0
 fi
 
-echo "grove: installing $ASSET ..."
+echo "grove: downloading $ASSET (~65 MB)…"
 mkdir -p "$BIN_DIR"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-curl -fsSL "$BIN_URL" -o "$tmp/grove"
+curl -fL --progress-bar "$BIN_URL" -o "$tmp/grove"
 curl -fsSL "$SUM_URL" -o "$tmp/SHASUMS256.txt"
+echo "grove: verifying checksum…"
 
 expected="$(grep " $ASSET\$" "$tmp/SHASUMS256.txt" | awk '{print $1}')"
 if [ -z "$expected" ]; then echo "grove: no checksum found for $ASSET" >&2; exit 1; fi
@@ -69,10 +70,22 @@ echo "grove: installed to $BIN_DIR/grove"
 
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
-  *) echo "grove: add to your PATH ->  export PATH=\"$BIN_DIR:\$PATH\"" ;;
+  *)
+    line='export PATH="$HOME/.grove/bin:$PATH"'
+    case "${SHELL:-}" in
+      */zsh) rc="$HOME/.zshrc" ;;
+      */bash) rc="$HOME/.bashrc" ;;
+      *) rc="$HOME/.profile" ;;
+    esac
+    if ! grep -qs '.grove/bin' "$rc" 2>/dev/null; then
+      printf '\n# grove\n%s\n' "$line" >>"$rc"
+      echo "grove: added $BIN_DIR to your PATH in $rc"
+    fi
+    echo "grove: restart your terminal, or run now:  export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
 esac
 
-echo "grove: fetching the claude runtime ..."
+echo "grove: fetching the claude runtime (~225 MB, this can take a minute)…"
 "$BIN_DIR/grove" install-runtime || echo "grove: run 'grove install-runtime' later to finish setup"
 
 echo "grove: done. Run 'grove' to start."
