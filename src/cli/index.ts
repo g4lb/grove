@@ -218,6 +218,7 @@ async function main(argv: string[]): Promise<number> {
         runtimeDir,
         existing,
         force,
+        envOverride: process.env.GROVE_CLAUDE_PATH ?? null,
         out: (line) => console.log(line),
         install: (platform) =>
           installRuntime({

@@ -9,6 +9,8 @@ export interface InstallRuntimeCliDeps {
   runtimeDir: string;
   existing: string | null;
   force: boolean;
+  /** The value of $GROVE_CLAUDE_PATH if set (it takes runtime precedence), else null. */
+  envOverride: string | null;
   /** Injectable; defaults (in the CLI) to the real installRuntime with fetch/tar. */
   install: (platform: PlatformInfo) => Promise<InstallRuntimeResult>;
   out: (line: string) => void;
@@ -19,6 +21,12 @@ export async function runInstallRuntime(deps: InstallRuntimeCliDeps): Promise<nu
     deps.out(`found existing claude at ${deps.existing}`);
     deps.out(`using it — run \`grove install-runtime --force\` to install the pinned ${deps.version}`);
     return 0;
+  }
+  // $GROVE_CLAUDE_PATH wins at runtime, so a forced install would be shadowed by it.
+  if (deps.force && deps.envOverride) {
+    deps.out(
+      `warning: GROVE_CLAUDE_PATH is set (${deps.envOverride}); it overrides the pinned build at runtime — unset it to use this install`,
+    );
   }
   const platform = detectPlatform(deps.platformName, deps.archName, deps.libc);
   if (!platform) {

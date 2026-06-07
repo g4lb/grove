@@ -11,9 +11,30 @@ function deps(over: Partial<InstallRuntimeCliDeps> = {}): InstallRuntimeCliDeps 
     out: () => {},
     existing: null,
     force: false,
+    envOverride: null,
     ...over,
   };
 }
+
+test("--force warns when GROVE_CLAUDE_PATH is set (it shadows the pinned install at runtime)", async () => {
+  let installed = false;
+  const lines: string[] = [];
+  const code = await runInstallRuntime(
+    deps({
+      force: true,
+      existing: "/env/claude",
+      envOverride: "/env/claude",
+      install: async () => {
+        installed = true;
+        return { path: "/home/.grove/runtime/claude", skipped: false };
+      },
+      out: (l) => lines.push(l),
+    }),
+  );
+  expect(code).toBe(0);
+  expect(installed).toBe(true); // --force still installs the pinned build
+  expect(lines.join("\n")).toContain("GROVE_CLAUDE_PATH");
+});
 
 test("returns 0 and reports success on a supported platform", async () => {
   const lines: string[] = [];
