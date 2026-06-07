@@ -167,13 +167,17 @@ export class TaskEngine {
     // the worktree in place (no teardown) for inspection and mark the task blocked.
     const gated = this.requireTask(taskId);
     if (gated.worktreePath) {
-      const committed = await this.infra.committedChanges(gated.worktreePath, baseSha);
+      let committed = false;
+      let summary = "session finished but committed no changes";
+      try {
+        committed = await this.infra.committedChanges(gated.worktreePath, baseSha);
+      } catch (err) {
+        // A git failure verifying commits must NOT escape and leave the task stuck "running"
+        // (the persist-before-return invariant). Treat an unverifiable result as not-done.
+        summary = `session finished but its result could not be verified: ${err instanceof Error ? err.message : String(err)}`;
+      }
       if (!committed) {
-        this.store.updatePhaseRun(run.id, {
-          state: "failed",
-          summary: "session finished but committed no changes",
-          endedAt: this.now(),
-        });
+        this.store.updatePhaseRun(run.id, { state: "failed", summary, endedAt: this.now() });
         this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
         return this.requireTask(taskId);
       }

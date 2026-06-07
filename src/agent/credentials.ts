@@ -38,9 +38,16 @@ export function credentialEnv(env: Env): Env {
   return out;
 }
 
-// Names matching this look like cloud/CI secrets we do not want to hand to the third-party
-// superpowers plugin running with bypassPermissions. Anthropic/Claude creds are exempted below.
-const SENSITIVE_ENV_KEY = /(SECRET|PRIVATE_KEY|_TOKEN|^AWS_|GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|^GCP_|^GOOGLE_|^AZURE_)/i;
+// Names matching this look like cloud/CI/service secrets the agent's dev work never needs, so we
+// don't hand them to the third-party superpowers plugin running with bypassPermissions. The SDK's
+// `env` option REPLACES the subprocess environment (it is not merged with process.env), so this
+// scoping is effective. Anthropic/Claude creds are exempted below.
+//
+// NOTE — best-effort, not a security boundary: the agent runs with bypassPermissions on the host,
+// so it can already read secret FILES (~/.aws, .env, …) regardless of env, and a denylist can't be
+// exhaustive without dropping vars a legitimate task needs (DB URLs, service keys its tests use).
+// True isolation requires sandboxing the agent — a deferred follow-up (the SDK has a `sandbox` option).
+const SENSITIVE_ENV_KEY = /(SECRET|PASSWORD|PASSWD|CREDENTIALS|PRIVATE_KEY|_ACCESS_KEY|_TOKEN|^AWS_|GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|^GCP_|^GOOGLE_|^AZURE_|^DIGITALOCEAN_|^CLOUDFLARE_)/i;
 
 /**
  * The base env for the agent subprocess with unrelated cloud/CI secrets removed, while keeping

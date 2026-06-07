@@ -63,3 +63,15 @@ test("a failing teardown still completes the task to done (does not propagate, n
   const done = await engine.startTask(startInput());
   expect(done.status).toBe("done");
 });
+
+test("a git error verifying commits does not escape — the task is blocked (not stuck running)", async () => {
+  class ThrowingCommitCheckInfra extends FakeTaskInfra {
+    async committedChanges(): Promise<boolean> {
+      throw new Error("git rev-list failed");
+    }
+  }
+  const { engine, store } = buildEngine(ok(), { infra: new ThrowingCommitCheckInfra() });
+  const t = await engine.startTask(startInput());
+  expect(t.status).toBe("blocked"); // not "running", not "done"
+  expect(store.getPhaseRuns(t.id)[0]!.summary.toLowerCase()).toContain("could not be verified");
+});

@@ -75,6 +75,25 @@ test("scopedAgentEnv drops unrelated cloud secrets but keeps dev/project + Anthr
   expect(env.SOME_PRIVATE_KEY).toBeUndefined();
 });
 
+test("scopedAgentEnv drops password / credential / access-key style secrets too", () => {
+  const env = scopedAgentEnv({
+    DB_PASSWORD: "p",
+    REGISTRY_PASSWD: "p2",
+    SERVICE_CREDENTIALS: "c",
+    SOME_ACCESS_KEY: "ak",
+    DIGITALOCEAN_TOKEN: "do",
+    CLOUDFLARE_API_TOKEN: "cf",
+    NODE_ENV: "test", // kept — a normal dev var
+  });
+  expect(env.DB_PASSWORD).toBeUndefined();
+  expect(env.REGISTRY_PASSWD).toBeUndefined();
+  expect(env.SERVICE_CREDENTIALS).toBeUndefined();
+  expect(env.SOME_ACCESS_KEY).toBeUndefined();
+  expect(env.DIGITALOCEAN_TOKEN).toBeUndefined();
+  expect(env.CLOUDFLARE_API_TOKEN).toBeUndefined();
+  expect(env.NODE_ENV).toBe("test");
+});
+
 test("scopedAgentEnv keeps an ANTHROPIC_ var even if its name matches a sensitive pattern", () => {
   const env = scopedAgentEnv({ ANTHROPIC_AUTH_TOKEN: "tok", CLAUDE_PRIVATE_KEY: "x" });
   expect(env.ANTHROPIC_AUTH_TOKEN).toBe("tok");
