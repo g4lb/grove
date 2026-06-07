@@ -3,6 +3,7 @@ import {
   detectCredentials,
   hasCredentials,
   credentialEnv,
+  scopedAgentEnv,
   detectClaudeCodeLogin,
   detectUsableCredential,
 } from "../../src/agent/credentials.ts";
@@ -35,6 +36,49 @@ test("credentialEnv passes through only the credential vars that are set", () =>
   expect(env.ANTHROPIC_API_KEY).toBe("sk-1");
   expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
   expect((env as Record<string, unknown>).FOO).toBeUndefined();
+});
+
+test("scopedAgentEnv drops unrelated cloud secrets but keeps dev/project + Anthropic creds", () => {
+  const env = scopedAgentEnv({
+    PATH: "/bin",
+    HOME: "/home/me",
+    MY_PROJECT_URL: "https://example.test",
+    ANTHROPIC_API_KEY: "sk-anthropic",
+    CLAUDE_CODE_OAUTH_TOKEN: "oauth-1",
+    AWS_SECRET_ACCESS_KEY: "aws-secret",
+    AWS_ACCESS_KEY_ID: "aws-id",
+    GH_TOKEN: "gh-token",
+    GITHUB_TOKEN: "gh-token-2",
+    NPM_TOKEN: "npm-token",
+    GCP_PROJECT: "gcp-proj",
+    GOOGLE_APPLICATION_CREDENTIALS: "/g/creds.json",
+    AZURE_CLIENT_SECRET: "az-secret",
+    MY_API_SECRET: "my-secret",
+    SOME_PRIVATE_KEY: "pk",
+  });
+  // Kept: dev/project vars and Anthropic/Claude creds.
+  expect(env.PATH).toBe("/bin");
+  expect(env.HOME).toBe("/home/me");
+  expect(env.MY_PROJECT_URL).toBe("https://example.test");
+  expect(env.ANTHROPIC_API_KEY).toBe("sk-anthropic");
+  expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth-1");
+  // Dropped: unrelated cloud secrets.
+  expect(env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+  expect(env.AWS_ACCESS_KEY_ID).toBeUndefined();
+  expect(env.GH_TOKEN).toBeUndefined();
+  expect(env.GITHUB_TOKEN).toBeUndefined();
+  expect(env.NPM_TOKEN).toBeUndefined();
+  expect(env.GCP_PROJECT).toBeUndefined();
+  expect(env.GOOGLE_APPLICATION_CREDENTIALS).toBeUndefined();
+  expect(env.AZURE_CLIENT_SECRET).toBeUndefined();
+  expect(env.MY_API_SECRET).toBeUndefined();
+  expect(env.SOME_PRIVATE_KEY).toBeUndefined();
+});
+
+test("scopedAgentEnv keeps an ANTHROPIC_ var even if its name matches a sensitive pattern", () => {
+  const env = scopedAgentEnv({ ANTHROPIC_AUTH_TOKEN: "tok", CLAUDE_PRIVATE_KEY: "x" });
+  expect(env.ANTHROPIC_AUTH_TOKEN).toBe("tok");
+  expect(env.CLAUDE_PRIVATE_KEY).toBe("x");
 });
 
 test("detectClaudeCodeLogin: true when the credentials file exists", () => {

@@ -2,7 +2,7 @@ import { query as realQuery } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentRunner } from "./agent-runner.ts";
 import type { AgentEvent, SessionContext, SessionResult } from "./events.ts";
 import { buildSessionPrompt, AUTONOMY_APPEND } from "./session-prompt.ts";
-import { credentialEnv } from "./credentials.ts";
+import { credentialEnv, scopedAgentEnv } from "./credentials.ts";
 
 /** The shape of the SDK's query() that we depend on (injected for testability). */
 export type QueryFn = typeof realQuery;
@@ -45,9 +45,11 @@ export class SdkAgentRunner implements AgentRunner {
           includePartialMessages: true,
           plugins: [{ type: "local", path: ctx.superpowersPath }],
           ...(this.claudePath ? { pathToClaudeCodeExecutable: this.claudePath } : {}),
-          // Full base env (so the subprocess inherits PATH/HOME and can launch the
-          // native binary) with the credential vars overlaid to guarantee presence.
-          env: { ...this.env, ...credentialEnv(this.env) },
+          // Base env scoped to drop unrelated cloud/CI secrets (the superpowers plugin runs
+          // with bypassPermissions) while keeping PATH/HOME/project vars so the subprocess can
+          // launch the native binary, with the Anthropic credential vars overlaid to guarantee
+          // presence.
+          env: { ...scopedAgentEnv(this.env), ...credentialEnv(this.env) },
         },
       } as Parameters<QueryFn>[0]);
 

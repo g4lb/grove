@@ -95,7 +95,10 @@ test("passes session options into query (plugin, cwd, model, bypassPermissions, 
     return gen();
   }) as unknown as QueryFn;
 
-  const runner = new SdkAgentRunner({ queryFn, env: { ANTHROPIC_API_KEY: "sk-test", FOO: "bar" } });
+  const runner = new SdkAgentRunner({
+    queryFn,
+    env: { ANTHROPIC_API_KEY: "sk-test", FOO: "bar", AWS_SECRET_ACCESS_KEY: "aws-secret", GH_TOKEN: "gh" },
+  });
   await drain(runner.run(ctx({ worktreePath: "/my/wt", superpowersPath: "/path/to/sp", prose: "Add login flow" })));
 
   expect(captured.options.plugins[0]).toEqual({ type: "local", path: "/path/to/sp" });
@@ -107,5 +110,8 @@ test("passes session options into query (plugin, cwd, model, bypassPermissions, 
   expect(captured.options.maxTurns).toBe(200);
   expect(captured.options.env.ANTHROPIC_API_KEY).toBe("sk-test");
   expect(captured.options.env.FOO).toBe("bar");
+  // Unrelated cloud secrets are scoped out of the subprocess env.
+  expect(captured.options.env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+  expect(captured.options.env.GH_TOKEN).toBeUndefined();
   expect(captured.prompt).toContain("Add login flow");
 });
