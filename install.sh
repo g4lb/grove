@@ -71,13 +71,14 @@ echo "grove: installed to $BIN_DIR/grove"
 case ":$PATH:" in
   *":$BIN_DIR:"*) ;;
   *)
-    line='export PATH="$HOME/.grove/bin:$PATH"'
+    # Honor $GROVE_HOME via $BIN_DIR; keep $PATH literal in the rc file.
+    line="export PATH=\"$BIN_DIR:\$PATH\""
     case "${SHELL:-}" in
       */zsh) rc="$HOME/.zshrc" ;;
       */bash) rc="$HOME/.bashrc" ;;
       *) rc="$HOME/.profile" ;;
     esac
-    if ! grep -qs '.grove/bin' "$rc" 2>/dev/null; then
+    if ! grep -qsF "$BIN_DIR" "$rc" 2>/dev/null; then
       printf '\n# grove\n%s\n' "$line" >>"$rc"
       echo "grove: added $BIN_DIR to your PATH in $rc"
     fi
