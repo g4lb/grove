@@ -31,7 +31,7 @@ brainstorm ─▸│gate│─▸ plan ─▸│gate│─▸ execute ─▸ rev
 
 - **git** and **Docker** (with `docker compose`)
 - An **Anthropic credential**: `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`
-- The **claude runtime** — grove fetches the pinned native binary via `grove install-runtime` (the installer does this for you)
+- The **claude runtime** — grove fetches the pinned native binary via `grove install-runtime` (the installer does this for you). If you already have Claude Code (`claude`) installed, grove reuses it — run `grove install-runtime --force` to install the pinned build instead.
 
 Run `grove doctor` any time to check all of the above.
 

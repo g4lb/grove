@@ -7,12 +7,19 @@ export interface InstallRuntimeCliDeps {
   libc?: "glibc" | "musl";
   version: string;
   runtimeDir: string;
+  existing: string | null;
+  force: boolean;
   /** Injectable; defaults (in the CLI) to the real installRuntime with fetch/tar. */
   install: (platform: PlatformInfo) => Promise<InstallRuntimeResult>;
   out: (line: string) => void;
 }
 
 export async function runInstallRuntime(deps: InstallRuntimeCliDeps): Promise<number> {
+  if (deps.existing && !deps.force) {
+    deps.out(`found existing claude at ${deps.existing}`);
+    deps.out(`using it — run \`grove install-runtime --force\` to install the pinned ${deps.version}`);
+    return 0;
+  }
   const platform = detectPlatform(deps.platformName, deps.archName, deps.libc);
   if (!platform) {
     deps.out(`unsupported platform: ${deps.platformName}/${deps.archName} (supported: darwin/linux, arm64/x64)`);

@@ -206,12 +206,18 @@ async function main(argv: string[]): Promise<number> {
       mkdirSync(runtimeDir, { recursive: true });
       const markerPath = join(runtimeDir, "claude.version");
       const libc = process.platform === "linux" ? detectLibc() : undefined;
+      const force = argv.includes("--force");
+      const runtimeClaude = join(runtimeDir, "claude");
+      const resolved = resolveClaudePath({ env: process.env, runtimeDir });
+      const existing = resolved && resolved !== runtimeClaude ? resolved : null;
       return runInstallRuntime({
         platformName: process.platform,
         archName: process.arch,
         libc,
         version: CLAUDE_SDK_VERSION,
         runtimeDir,
+        existing,
+        force,
         out: (line) => console.log(line),
         install: (platform) =>
           installRuntime({
