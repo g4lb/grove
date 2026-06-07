@@ -45,7 +45,7 @@ curl -fsSL https://github.com/g4lb/grove/releases/latest/download/install.sh | s
 
 This downloads the right binary for your platform, verifies its checksum, installs it to `~/.grove/bin/grove`, and fetches the pinned `claude` runtime. Add `~/.grove/bin` to your `PATH` if prompted.
 
-**Homebrew** (once the `g4lb/homebrew-tap` is published):
+**Homebrew:**
 
 ```sh
 brew install g4lb/tap/grove
