@@ -1,9 +1,9 @@
 import { test, expect } from "bun:test";
 import { SdkAgentRunner } from "../../src/agent/sdk-agent-runner.ts";
-import type { PhaseContext } from "../../src/agent/events.ts";
+import type { SessionContext } from "../../src/agent/events.ts";
 
-function ctx(): PhaseContext {
-  return { taskId: "t", title: "x", worktreePath: "/wt", model: "m", priorArtifacts: [] };
+function ctx(): SessionContext {
+  return { taskId: "t", title: "x", prose: "x", worktreePath: "/wt", branch: "grove/t", model: "m", superpowersPath: "/sp" };
 }
 
 function fakeQuery(captured: { opts?: any }) {
@@ -14,7 +14,7 @@ function fakeQuery(captured: { opts?: any }) {
 }
 
 async function drain(runner: SdkAgentRunner) {
-  const gen = runner.run("brainstorm", ctx());
+  const gen = runner.run(ctx());
   let r = await gen.next();
   while (!r.done) r = await gen.next();
 }
