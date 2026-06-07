@@ -5,7 +5,10 @@ import { runInit } from "./init.ts";
 import { resolvePaths } from "../config/paths.ts";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
+import { installRuntime, detectLibc } from "../runtime/fetch-claude.ts";
+import { runInstallRuntime } from "./install-runtime.ts";
 import { SqliteStore } from "../store/sqlite-store.ts";
 import { DockerRunner } from "../infra/docker-runner.ts";
 import { GitRunner } from "../infra/git-runner.ts";
@@ -29,7 +32,7 @@ import { TaskRunController } from "../app/controller.ts";
 const VERSION = "0.0.1";
 
 function printUsage(): void {
-  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | --version]');
+  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | install-runtime | --version]');
 }
 
 function grovePaths() {
@@ -175,6 +178,46 @@ async function main(argv: string[]): Promise<number> {
       } finally {
         store.close();
       }
+    }
+    case "install-runtime": {
+      const paths = grovePaths();
+      const runtimeDir = join(paths.root, "runtime");
+      mkdirSync(runtimeDir, { recursive: true });
+      const markerPath = join(runtimeDir, "claude.version");
+      const libc = process.platform === "linux" ? detectLibc() : undefined;
+      return runInstallRuntime({
+        platformName: process.platform,
+        archName: process.arch,
+        libc,
+        version: CLAUDE_SDK_VERSION,
+        runtimeDir,
+        out: (line) => console.log(line),
+        install: (platform) =>
+          installRuntime({
+            platform,
+            version: CLAUDE_SDK_VERSION,
+            runtimeDir,
+            download: async (url) => {
+              const res = await fetch(url);
+              if (!res.ok) throw new Error(`registry returned ${res.status} for ${url}`);
+              return res.arrayBuffer();
+            },
+            extractClaude: async (tgz, destDir) => {
+              const tmp = join(destDir, "claude.tgz");
+              writeFileSync(tmp, new Uint8Array(tgz));
+              const proc = Bun.spawn(["tar", "-xzf", tmp, "-C", destDir, "--strip-components=1", "package/claude"], {
+                stdout: "pipe",
+                stderr: "pipe",
+              });
+              if ((await proc.exited) !== 0) throw new Error("failed to extract claude from the tarball");
+              return join(destDir, "claude");
+            },
+            ensureExecutable: (p) => chmodSync(p, 0o755),
+            readMarker: () => (existsSync(markerPath) ? readFileSync(markerPath, "utf8").trim() : null),
+            writeMarker: (v) => writeFileSync(markerPath, v),
+            exists: () => existsSync(join(runtimeDir, "claude")),
+          }),
+      });
     }
     default:
       printUsage();
