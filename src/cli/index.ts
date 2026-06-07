@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
-import { runDoctor } from "./doctor.ts";
+import { runDoctor, checkClaudeRuntime } from "./doctor.ts";
 import { BunCommandRunner } from "../infra/command-runner.ts";
 import { runInit } from "./init.ts";
 import { resolvePaths } from "../config/paths.ts";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
+import { installRuntime, detectLibc, platformPackage } from "../runtime/fetch-claude.ts";
+import { runInstallRuntime } from "./install-runtime.ts";
 import { SqliteStore } from "../store/sqlite-store.ts";
 import { DockerRunner } from "../infra/docker-runner.ts";
 import { GitRunner } from "../infra/git-runner.ts";
@@ -16,6 +19,7 @@ import { loadConfig } from "../config/config.ts";
 import { InfraManager } from "../infra/infra-manager.ts";
 import { ShellDiskMonitor } from "../infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../agent/sdk-agent-runner.ts";
+import { resolveClaudePath } from "../agent/claude-binary.ts";
 import { detectCredentials } from "../agent/credentials.ts";
 import { HeuristicRouter } from "../engine/router.ts";
 import { TaskEngine } from "../engine/task-engine.ts";
@@ -29,7 +33,7 @@ import { TaskRunController } from "../app/controller.ts";
 const VERSION = "0.0.1";
 
 function printUsage(): void {
-  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | --version]');
+  console.log('grove — usage: grove [run "<prose>" [--yes] | init | gc [--yes] | doctor | install-runtime | --version]');
 }
 
 function grovePaths() {
@@ -44,6 +48,12 @@ async function launchTui(): Promise<number> {
     console.log("no Anthropic credential — set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)");
     return 1;
   }
+  const runtimeDir = join(paths.root, "runtime");
+  const claudePath = resolveClaudePath({ env: process.env, runtimeDir });
+  if (!claudePath) {
+    console.log("claude runtime not installed — run `grove install-runtime`");
+    return 1;
+  }
   const runner = new BunCommandRunner();
   const repoPath = process.cwd();
   const config = await loadConfig(paths);
@@ -52,7 +62,7 @@ async function launchTui(): Promise<number> {
   const worktrees = new GitWorktreeManager(git, paths);
   const compose = new DockerComposeManager(new DockerRunner(runner));
   const infra = new InfraManager(worktrees, compose);
-  const agent = new SdkAgentRunner({ env: process.env });
+  const agent = new SdkAgentRunner({ env: process.env, claudePath });
   const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
   const controller = new TaskRunController(engine, new HeuristicRouter(), repoPath);
   controller.setLister(() => engine.listTasks());
@@ -76,7 +86,17 @@ async function main(argv: string[]): Promise<number> {
       console.log(VERSION);
       return 0;
     case "doctor": {
-      const report = await runDoctor(new BunCommandRunner());
+      const paths = grovePaths();
+      const runtimeDir = join(paths.root, "runtime");
+      const markerPath = join(runtimeDir, "claude.version");
+      const report = await runDoctor(new BunCommandRunner(), process.env, [
+        () =>
+          checkClaudeRuntime({
+            resolve: () => resolveClaudePath({ env: process.env, runtimeDir }),
+            installedVersion: () => (existsSync(markerPath) ? readFileSync(markerPath, "utf8").trim() : null),
+            expected: CLAUDE_SDK_VERSION,
+          }),
+      ]);
       for (const c of report.checks) {
         console.log(`${c.ok ? "✓" : "✗"} ${c.name}: ${c.detail}`);
       }
@@ -153,7 +173,9 @@ async function main(argv: string[]): Promise<number> {
         const worktrees = new GitWorktreeManager(git, paths);
         const compose = new DockerComposeManager(new DockerRunner(runner));
         const infra = new InfraManager(worktrees, compose);
-        const agent = new SdkAgentRunner({ env: process.env });
+        const runtimeDir = join(paths.root, "runtime");
+        const claudePath = resolveClaudePath({ env: process.env, runtimeDir });
+        const agent = new SdkAgentRunner({ env: process.env, claudePath });
         const engine = new TaskEngine({ store, agent, infra, model: config.agent.model });
 
         const result = await runTask(prose, {
@@ -164,6 +186,7 @@ async function main(argv: string[]): Promise<number> {
           paths,
           repoPath,
           hasCredential: detectCredentials(process.env).present,
+          hasClaudeRuntime: claudePath !== null,
           isGitRepo: await git.isGitRepo(),
           yes,
           decide: () => stdinGateDecider(async (p) => prompt(p) ?? ""),
@@ -175,6 +198,67 @@ async function main(argv: string[]): Promise<number> {
       } finally {
         store.close();
       }
+    }
+    case "install-runtime": {
+      const paths = grovePaths();
+      const runtimeDir = join(paths.root, "runtime");
+      mkdirSync(runtimeDir, { recursive: true });
+      const markerPath = join(runtimeDir, "claude.version");
+      const libc = process.platform === "linux" ? detectLibc() : undefined;
+      return runInstallRuntime({
+        platformName: process.platform,
+        archName: process.arch,
+        libc,
+        version: CLAUDE_SDK_VERSION,
+        runtimeDir,
+        out: (line) => console.log(line),
+        install: (platform) =>
+          installRuntime({
+            platform,
+            version: CLAUDE_SDK_VERSION,
+            runtimeDir,
+            download: async (url) => {
+              const res = await fetch(url);
+              if (!res.ok) throw new Error(`registry returned ${res.status} for ${url}`);
+              return res.arrayBuffer();
+            },
+            verifyIntegrity: async (tgz) => {
+              const pkg = platformPackage(platform);
+              const meta = (await (await fetch(`https://registry.npmjs.org/${pkg}`)).json()) as any;
+              const dist = meta?.versions?.[CLAUDE_SDK_VERSION]?.dist;
+              if (!dist) throw new Error(`no registry metadata for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              const bytes = new Uint8Array(tgz);
+              if (typeof dist.integrity === "string" && dist.integrity.includes("-")) {
+                const [algo, expected] = dist.integrity.split("-");
+                const got = new Bun.CryptoHasher(algo).update(bytes).digest("base64");
+                if (got !== expected) throw new Error(`integrity mismatch for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              } else if (typeof dist.shasum === "string") {
+                const got = new Bun.CryptoHasher("sha1").update(bytes).digest("hex");
+                if (got !== dist.shasum) throw new Error(`integrity (shasum) mismatch for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              } else {
+                throw new Error(`no integrity metadata for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              }
+            },
+            extractClaude: async (tgz, destDir) => {
+              const tmp = join(destDir, "claude.tgz");
+              writeFileSync(tmp, new Uint8Array(tgz));
+              try {
+                const proc = Bun.spawn(["tar", "-xzf", tmp, "-C", destDir, "--strip-components=1", "package/claude"], {
+                  stdout: "pipe",
+                  stderr: "pipe",
+                });
+                if ((await proc.exited) !== 0) throw new Error("failed to extract claude from the tarball");
+                return join(destDir, "claude");
+              } finally {
+                try { unlinkSync(tmp); } catch {}
+              }
+            },
+            ensureExecutable: (p) => chmodSync(p, 0o755),
+            readMarker: () => (existsSync(markerPath) ? readFileSync(markerPath, "utf8").trim() : null),
+            writeMarker: (v) => writeFileSync(markerPath, v),
+            exists: () => existsSync(join(runtimeDir, "claude")),
+          }),
+      });
     }
     default:
       printUsage();

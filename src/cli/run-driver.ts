@@ -22,6 +22,7 @@ export interface RunDeps {
   paths: GrovePaths;
   repoPath: string;
   hasCredential: boolean;
+  hasClaudeRuntime: boolean;
   isGitRepo: boolean;
   yes: boolean;
   decide: (gate: { task: Task; artifactPath: string | null }) => Promise<GateDecision>;
@@ -46,6 +47,9 @@ export async function runTask(prose: string, deps: RunDeps): Promise<RunResult> 
   // 1. Prechecks — fail before provisioning.
   if (!deps.hasCredential) {
     return { ok: false, message: "no Anthropic credential — set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)" };
+  }
+  if (!deps.hasClaudeRuntime) {
+    return { ok: false, message: "claude runtime not installed — run `grove install-runtime`" };
   }
   if (!deps.isGitRepo) {
     return { ok: false, message: "not a git repository — run grove from inside your project" };

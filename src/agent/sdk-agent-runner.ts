@@ -15,15 +15,19 @@ export interface SdkAgentRunnerOptions {
   queryFn?: QueryFn;
   /** The environment to derive credentials from and pass to the subprocess (defaults to process.env). */
   env?: Record<string, string | undefined>;
+  /** Absolute path to the native `claude` binary; null lets the SDK self-resolve (dev). */
+  claudePath?: string | null;
 }
 
 export class SdkAgentRunner implements AgentRunner {
   private queryFn: QueryFn;
   private env: Record<string, string | undefined>;
+  private claudePath: string | null;
 
   constructor(opts: SdkAgentRunnerOptions = {}) {
     this.queryFn = opts.queryFn ?? realQuery;
     this.env = opts.env ?? process.env;
+    this.claudePath = opts.claudePath ?? null;
   }
 
   async *run(phase: Phase, ctx: PhaseContext): AsyncGenerator<AgentEvent, PhaseResult> {
@@ -45,6 +49,7 @@ export class SdkAgentRunner implements AgentRunner {
           maxTurns: def.maxTurns,
           permissionMode: "bypassPermissions",
           includePartialMessages: true,
+          ...(this.claudePath ? { pathToClaudeCodeExecutable: this.claudePath } : {}),
           // Full base env (so the subprocess inherits PATH/HOME and can launch the
           // native binary) with the credential vars overlaid to guarantee presence.
           env: { ...this.env, ...credentialEnv(this.env) },

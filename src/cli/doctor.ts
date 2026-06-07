@@ -24,9 +24,29 @@ const REQUIRED: Dependency[] = [
   { name: "docker compose", cmd: "docker", args: ["compose", "version"] },
 ];
 
+export interface ClaudeRuntimeCheckDeps {
+  resolve: () => string | null;
+  installedVersion: () => string | null;
+  expected: string;
+}
+
+export function checkClaudeRuntime(deps: ClaudeRuntimeCheckDeps): DependencyCheck {
+  const name = "claude runtime";
+  const path = deps.resolve();
+  if (!path) {
+    return { name, ok: false, detail: "not installed — run `grove install-runtime`" };
+  }
+  const installed = deps.installedVersion();
+  if (installed && installed !== deps.expected) {
+    return { name, ok: true, detail: `version mismatch: ${installed} (expected ${deps.expected}) — run \`grove install-runtime\`` };
+  }
+  return { name, ok: true, detail: `${path} (${installed ?? "version unknown"})` };
+}
+
 export async function runDoctor(
   runner: CommandRunner,
   env: Record<string, string | undefined> = process.env,
+  extraChecks: Array<() => DependencyCheck | Promise<DependencyCheck>> = [],
 ): Promise<DoctorReport> {
   const checks: DependencyCheck[] = [];
   for (const dep of REQUIRED) {
@@ -50,6 +70,10 @@ export async function runDoctor(
       ? `found (${cred.kind})`
       : "set ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN)",
   });
+
+  for (const c of extraChecks) {
+    checks.push(await c());
+  }
 
   return { checks, ok: checks.every((c) => c.ok) };
 }
