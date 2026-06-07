@@ -98,8 +98,8 @@ export class TaskEngine {
         result = await this.infra.provision(task.id, input.title);
       } catch (err) {
         // A provision failure (e.g. `git worktree add`) must NOT leave the task stuck at the
-        // default "running" status (it would be unrecoverable now that resume is gone) or
-        // escape as an unhandled rejection. Mark it blocked — persist-before-return.
+        // default "running" status (an unrecoverable zombie) or escape as an unhandled
+        // rejection. Mark it blocked — preserving the persist-before-return invariant.
         this.store.appendEvent({
           taskId: task.id,
           type: "error",
