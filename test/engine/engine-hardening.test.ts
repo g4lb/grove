@@ -73,5 +73,5 @@ test("a git error verifying commits does not escape — the task is blocked (not
   const { engine, store } = buildEngine(ok(), { infra: new ThrowingCommitCheckInfra() });
   const t = await engine.startTask(startInput());
   expect(t.status).toBe("blocked"); // not "running", not "done"
-  expect(store.getPhaseRuns(t.id)[0]!.summary.toLowerCase()).toContain("could not be verified");
+  expect((store.getPhaseRuns(t.id)[0]!.summary ?? "").toLowerCase()).toContain("could not be verified");
 });
