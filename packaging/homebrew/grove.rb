@@ -3,7 +3,7 @@
 class Grove < Formula
   desc "Orchestrates AI-driven development in isolated environments"
   homepage "https://github.com/g4lb/grove"
-  version "0.1.1"
+  version "0.1.2"
 
   on_macos do
     on_arm do
