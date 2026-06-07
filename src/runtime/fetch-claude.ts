@@ -42,6 +42,8 @@ export interface InstallRuntimeDeps {
   runtimeDir: string;
   download: (url: string) => Promise<ArrayBuffer>;
   extractClaude: (tgz: ArrayBuffer, destDir: string) => Promise<string>;
+  /** Verify the downloaded tarball bytes against the registry's published hash; throws on mismatch. */
+  verifyIntegrity: (tgz: ArrayBuffer) => Promise<void>;
   ensureExecutable: (path: string) => void;
   readMarker: () => string | null;
   writeMarker: (version: string) => void;
@@ -74,6 +76,7 @@ export async function installRuntime(deps: InstallRuntimeDeps): Promise<InstallR
   }
   const url = tarballUrl(platformPackage(deps.platform), deps.version);
   const tgz = await withRetry(() => deps.download(url), deps.retries ?? 3);
+  await deps.verifyIntegrity(tgz);
   const path = await deps.extractClaude(tgz, deps.runtimeDir);
   deps.ensureExecutable(path);
   deps.writeMarker(deps.version);

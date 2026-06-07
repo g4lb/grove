@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
 import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
-import { installRuntime, detectLibc } from "../runtime/fetch-claude.ts";
+import { installRuntime, detectLibc, platformPackage } from "../runtime/fetch-claude.ts";
 import { runInstallRuntime } from "./install-runtime.ts";
 import { SqliteStore } from "../store/sqlite-store.ts";
 import { DockerRunner } from "../infra/docker-runner.ts";
@@ -222,16 +222,36 @@ async function main(argv: string[]): Promise<number> {
               if (!res.ok) throw new Error(`registry returned ${res.status} for ${url}`);
               return res.arrayBuffer();
             },
+            verifyIntegrity: async (tgz) => {
+              const pkg = platformPackage(platform);
+              const meta = (await (await fetch(`https://registry.npmjs.org/${pkg}`)).json()) as any;
+              const dist = meta?.versions?.[CLAUDE_SDK_VERSION]?.dist;
+              if (!dist) throw new Error(`no registry metadata for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              const bytes = new Uint8Array(tgz);
+              if (typeof dist.integrity === "string" && dist.integrity.includes("-")) {
+                const [algo, expected] = dist.integrity.split("-");
+                const got = new Bun.CryptoHasher(algo).update(bytes).digest("base64");
+                if (got !== expected) throw new Error(`integrity mismatch for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              } else if (typeof dist.shasum === "string") {
+                const got = new Bun.CryptoHasher("sha1").update(bytes).digest("hex");
+                if (got !== dist.shasum) throw new Error(`integrity (shasum) mismatch for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              } else {
+                throw new Error(`no integrity metadata for ${pkg}@${CLAUDE_SDK_VERSION}`);
+              }
+            },
             extractClaude: async (tgz, destDir) => {
               const tmp = join(destDir, "claude.tgz");
               writeFileSync(tmp, new Uint8Array(tgz));
-              const proc = Bun.spawn(["tar", "-xzf", tmp, "-C", destDir, "--strip-components=1", "package/claude"], {
-                stdout: "pipe",
-                stderr: "pipe",
-              });
-              if ((await proc.exited) !== 0) throw new Error("failed to extract claude from the tarball");
-              try { unlinkSync(tmp); } catch {}
-              return join(destDir, "claude");
+              try {
+                const proc = Bun.spawn(["tar", "-xzf", tmp, "-C", destDir, "--strip-components=1", "package/claude"], {
+                  stdout: "pipe",
+                  stderr: "pipe",
+                });
+                if ((await proc.exited) !== 0) throw new Error("failed to extract claude from the tarball");
+                return join(destDir, "claude");
+              } finally {
+                try { unlinkSync(tmp); } catch {}
+              }
             },
             ensureExecutable: (p) => chmodSync(p, 0o755),
             readMarker: () => (existsSync(markerPath) ? readFileSync(markerPath, "utf8").trim() : null),

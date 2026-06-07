@@ -9,6 +9,7 @@ function deps(over: Partial<InstallRuntimeDeps> = {}): InstallRuntimeDeps {
     download: async () => new Uint8Array([1, 2, 3]).buffer,
     extractClaude: async (_tgz, destDir) => `${destDir}/claude`,
     ensureExecutable: () => {},
+    verifyIntegrity: async () => {},
     readMarker: () => null,
     writeMarker: () => {},
     exists: () => false,
@@ -64,4 +65,31 @@ test("uses the musl package name for musl linux", async () => {
     download: async (u) => { urls.push(u); return new ArrayBuffer(0); },
   }));
   expect(urls[0]).toContain("claude-agent-sdk-linux-x64-musl");
+});
+
+test("verifies integrity before extracting; a mismatch aborts without extract/chmod/marker", async () => {
+  let extracted = false;
+  let chmodded = false;
+  let marked = false;
+  await expect(
+    installRuntime(deps({
+      verifyIntegrity: async () => { throw new Error("integrity mismatch"); },
+      extractClaude: async (_t, d) => { extracted = true; return `${d}/claude`; },
+      ensureExecutable: () => { chmodded = true; },
+      writeMarker: () => { marked = true; },
+    })),
+  ).rejects.toThrow(/integrity/i);
+  expect(extracted).toBe(false);
+  expect(chmodded).toBe(false);
+  expect(marked).toBe(false);
+});
+
+test("passes the downloaded bytes to verifyIntegrity before extract", async () => {
+  const order: string[] = [];
+  await installRuntime(deps({
+    download: async () => { order.push("download"); return new ArrayBuffer(8); },
+    verifyIntegrity: async () => { order.push("verify"); },
+    extractClaude: async (_t, d) => { order.push("extract"); return `${d}/claude`; },
+  }));
+  expect(order).toEqual(["download", "verify", "extract"]);
 });
