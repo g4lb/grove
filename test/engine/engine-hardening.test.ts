@@ -1,15 +1,14 @@
 import { test, expect } from "bun:test";
 import { SqliteStore } from "../../src/store/sqlite-store.ts";
 import { TaskEngine } from "../../src/engine/task-engine.ts";
-import { buildEngine, ok, FakeTaskInfra } from "./helpers.ts";
+import { buildEngine, startInput, ok, fail, FakeTaskInfra } from "./helpers.ts";
 import type { AgentRunner } from "../../src/agent/agent-runner.ts";
-import type { Phase } from "../../src/domain/types.ts";
-import type { AgentEvent, PhaseContext, PhaseResult } from "../../src/agent/events.ts";
+import type { AgentEvent, SessionContext, SessionResult } from "../../src/agent/events.ts";
 
-// An AgentRunner whose run() throws mid-phase (e.g. network drop / auth failure).
+// An AgentRunner whose run() throws mid-session (e.g. network drop / auth failure).
 class ThrowingRunner implements AgentRunner {
   // eslint-disable-next-line require-yield
-  async *run(_phase: Phase, _ctx: PhaseContext): AsyncGenerator<AgentEvent, PhaseResult> {
+  async *run(_ctx: SessionContext): AsyncGenerator<AgentEvent, SessionResult> {
     throw new Error("network drop");
   }
 }
@@ -25,9 +24,9 @@ test("a thrown agent error moves the task to blocked (does not propagate) and ma
   });
 
   // startTask must NOT throw — it should resolve with a blocked task.
-  const task = await engine.startTask({ title: "x", repoPath: "/r", kind: "task" });
+  const task = await engine.startTask(startInput());
   expect(task.status).toBe("blocked");
-  expect(task.currentPhase).toBe("brainstorm");
+  expect(task.currentPhase).toBe("session");
 
   const runs = store.getPhaseRuns(task.id);
   expect(runs.length).toBe(1);
@@ -36,27 +35,32 @@ test("a thrown agent error moves the task to blocked (does not propagate) and ma
 });
 
 test("phase runs record startedAt", async () => {
-  const { engine, store } = buildEngine({ brainstorm: ok("brainstorm", "/wt/.grove/design.md") });
-  const t = await engine.startTask({ title: "x", repoPath: "/r", kind: "task" });
+  const { engine, store } = buildEngine(ok());
+  const t = await engine.startTask(startInput());
   const runs = store.getPhaseRuns(t.id);
   expect(runs[0]!.startedAt).toBe("2026-06-06T00:00:00.000Z");
 });
 
-test("a throwing subscriber does not block the task — the phase still completes normally", async () => {
-  const { engine } = buildEngine({ brainstorm: ok("brainstorm", "/wt/.grove/design.md", [{ type: "token", text: "hi" }]) });
-  // register a subscriber that throws on every event
-  let taskId = "";
-  // we need the id before events fire; subscribe to all by registering on the id after createTask is internal.
-  // Instead, subscribe broadly: the engine emits per-taskId, so subscribe using a side channel —
-  // simplest: start the task, which emits during the awaited call, but we can't subscribe before the id exists.
-  // So assert the inverse: a subscriber added for a known id that throws is isolated. Use a 2-step flow:
-  const t0 = await engine.startTask({ title: "x", repoPath: "/r", kind: "task" }); // brainstorm gate
-  taskId = t0.id;
+test("a throwing subscriber does not corrupt the task — the session still completes its run", async () => {
+  // First run fails (blocked) so resume actually re-runs the session and re-emits events.
+  const { engine } = buildEngine(fail("nope", [{ type: "token", text: "hi" }]));
+  const t0 = await engine.startTask(startInput());
+  expect(t0.status).toBe("blocked");
+
   let threw = false;
-  engine.subscribe(taskId, () => { threw = true; throw new Error("bad subscriber"); });
-  // rerun emits events again; a throwing subscriber must NOT block the task
-  const t1 = await engine.confirmGate(taskId, { kind: "rerun" });
+  engine.subscribe(t0.id, () => { threw = true; throw new Error("bad subscriber"); });
+  const resumed = await engine.resume(t0.id, { superpowersPath: "/sp" });
   expect(threw).toBe(true);
-  expect(t1.status).toBe("waiting_confirm"); // not blocked
-  expect(t1.currentPhase).toBe("brainstorm");
+  expect(resumed.status).toBe("blocked"); // run completed; not left stuck in "running"
+});
+
+test("a failing teardown still completes the task to done (does not propagate, no stuck-running)", async () => {
+  class ThrowingTeardownInfra extends FakeTaskInfra {
+    async teardown(): Promise<void> {
+      throw new Error("docker down failed");
+    }
+  }
+  const { engine } = buildEngine(ok(), { infra: new ThrowingTeardownInfra() });
+  const done = await engine.startTask(startInput());
+  expect(done.status).toBe("done");
 });

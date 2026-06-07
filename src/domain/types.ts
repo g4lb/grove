@@ -7,7 +7,8 @@ export type TaskStatus =
   | "done"
   | "stopped";
 
-export type Phase = "brainstorm" | "plan" | "execute" | "review" | "finish";
+/** A task runs as a single autonomous session; the store keeps one phase row per task. */
+export type Phase = "session";
 
 export type PhaseState = "pending" | "running" | "succeeded" | "failed";
 

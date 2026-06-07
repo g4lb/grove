@@ -102,7 +102,7 @@ export class SqliteStore implements Store {
         input.description ?? null,
         input.kind,
         input.status ?? "running",
-        input.currentPhase ?? "brainstorm",
+        input.currentPhase ?? "session",
         input.repoPath,
         null,
         null,
