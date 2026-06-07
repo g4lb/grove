@@ -9,6 +9,7 @@ import { chmodSync, mkdirSync, writeFileSync, readFileSync, existsSync, unlinkSy
 import { CLAUDE_SDK_VERSION } from "../agent/sdk-version.ts";
 import { installRuntime, detectLibc, platformPackage } from "../runtime/fetch-claude.ts";
 import { runInstallRuntime } from "./install-runtime.ts";
+import { downloadWithProgress } from "../runtime/download.ts";
 import { SqliteStore } from "../store/sqlite-store.ts";
 import { DockerRunner } from "../infra/docker-runner.ts";
 import { GitRunner } from "../infra/git-runner.ts";
@@ -218,9 +219,19 @@ async function main(argv: string[]): Promise<number> {
             version: CLAUDE_SDK_VERSION,
             runtimeDir,
             download: async (url) => {
-              const res = await fetch(url);
-              if (!res.ok) throw new Error(`registry returned ${res.status} for ${url}`);
-              return res.arrayBuffer();
+              let lastPct = -1;
+              const buf = await downloadWithProgress(url, {
+                onProgress: (received, total) => {
+                  const pct = Math.floor((received / total) * 100);
+                  if (pct !== lastPct && (pct % 5 === 0 || pct === 100)) {
+                    lastPct = pct;
+                    const mb = (total / 1024 / 1024).toFixed(0);
+                    process.stdout.write(`\r  downloading claude runtime (~${mb} MB)… ${pct}%`);
+                  }
+                },
+              });
+              process.stdout.write("\n");
+              return buf;
             },
             verifyIntegrity: async (tgz) => {
               const pkg = platformPackage(platform);
