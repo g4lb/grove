@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { buildEngine, startInput, ok, fail, SUPERPOWERS_PATH } from "./helpers.ts";
+import { buildEngine, startInput, ok, fail, SUPERPOWERS_PATH, FakeTaskInfra } from "./helpers.ts";
 
 test("startTask provisions, runs the session, and completes done", async () => {
   const { engine, infra } = buildEngine(ok("done", [{ type: "token", text: "hi" }]));
@@ -20,6 +20,36 @@ test("a failed session moves the task to blocked (and does not teardown)", async
   expect(task.status).toBe("blocked");
   expect(task.currentPhase).toBe("session");
   expect(infra.toreDown).toEqual([]);
+});
+
+test("a successful session that committed nothing is blocked (not done) and the worktree is left in place", async () => {
+  const infra = new FakeTaskInfra();
+  infra.committed = false;
+  const { engine } = buildEngine(ok("done"), { infra });
+  const task = await engine.startTask(startInput());
+  expect(task.status).toBe("blocked");
+  expect(task.currentPhase).toBe("session");
+  // No teardown — the worktree is kept for inspection.
+  expect(infra.toreDown).toEqual([]);
+});
+
+test("an empty-commit blocked session records the phase_run as failed with a clear summary", async () => {
+  const infra = new FakeTaskInfra();
+  infra.committed = false;
+  const { engine, store } = buildEngine(ok("done"), { infra });
+  const task = await engine.startTask(startInput());
+  const runs = store.getPhaseRuns(task.id);
+  expect(runs[runs.length - 1]!.state).toBe("failed");
+  expect(runs[runs.length - 1]!.summary).toContain("committed no changes");
+});
+
+test("a successful session with commits completes done and tears down", async () => {
+  const infra = new FakeTaskInfra();
+  infra.committed = true;
+  const { engine } = buildEngine(ok("done"), { infra });
+  const task = await engine.startTask(startInput());
+  expect(task.status).toBe("done");
+  expect(infra.toreDown).toEqual([{ taskId: task.id, worktreePath: "/wt" }]);
 });
 
 test("startTask records one phase_run and streams events to the store", async () => {

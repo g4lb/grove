@@ -3,6 +3,8 @@ interface ProvisionedWorktree {
   taskId: string;
   worktreePath: string;
   branch: string;
+  /** The repo HEAD SHA the worktree branched from, used to detect whether the session committed anything. */
+  baseSha: string;
 }
 export interface TaskProvisionResult {
   worktree: ProvisionedWorktree;
@@ -13,4 +15,6 @@ export interface TaskProvisionResult {
 export interface TaskInfra {
   provision(taskId: string, title: string): Promise<TaskProvisionResult>;
   teardown(taskId: string, worktreePath: string): Promise<void>;
+  /** True if the worktree branch has at least one commit ahead of the base SHA it branched from. */
+  committedChanges(worktreePath: string, baseSha: string): Promise<boolean>;
 }

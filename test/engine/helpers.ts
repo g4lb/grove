@@ -10,16 +10,21 @@ export const SUPERPOWERS_PATH = "/sp";
 export class FakeTaskInfra implements TaskInfra {
   provisioned: string[] = [];
   toreDown: Array<{ taskId: string; worktreePath: string }> = [];
+  /** Override to simulate a session that committed nothing. */
+  committed = true;
   constructor(private composeStarted = false) {}
   async provision(taskId: string, _title: string): Promise<TaskProvisionResult> {
     this.provisioned.push(taskId);
     return {
-      worktree: { taskId, worktreePath: "/wt", branch: `grove/${taskId}` },
+      worktree: { taskId, worktreePath: "/wt", branch: `grove/${taskId}`, baseSha: "base000" },
       composeStarted: this.composeStarted,
     };
   }
   async teardown(taskId: string, worktreePath: string): Promise<void> {
     this.toreDown.push({ taskId, worktreePath });
+  }
+  async committedChanges(_worktreePath: string, _baseSha: string): Promise<boolean> {
+    return this.committed;
   }
 }
 

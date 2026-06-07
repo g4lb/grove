@@ -100,7 +100,7 @@ export class TaskEngine {
         composeProject: result.composeStarted ? `grove-${task.id}` : null,
       });
       this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
-      return await this.runSession(task.id, input.superpowersPath, input.description ?? input.title);
+      return await this.runSession(task.id, input.superpowersPath, input.description ?? input.title, result.worktree.baseSha);
     } finally {
       off();
     }
@@ -113,8 +113,19 @@ export class TaskEngine {
     return this.runSession(task.id, input.superpowersPath, task.description ?? task.title);
   }
 
-  /** Run one autonomous agent session, persisting before returning. */
-  protected async runSession(taskId: string, superpowersPath: string, prose: string): Promise<Task> {
+  /**
+   * Run one autonomous agent session, persisting before returning.
+   *
+   * `baseSha` is the repo SHA the worktree branched from at provision time; when present, a
+   * "successful" session is only reported `done` if it actually committed work onto the branch
+   * (the SDK reports success when the conversation ends normally, even with an empty branch).
+   */
+  protected async runSession(
+    taskId: string,
+    superpowersPath: string,
+    prose: string,
+    baseSha?: string,
+  ): Promise<Task> {
     const task = this.requireTask(taskId);
     this.store.updateTask(taskId, { status: "running", currentPhase: "session" });
     const run = this.store.createPhaseRun({ taskId, phase: "session", state: "running" });
@@ -155,6 +166,24 @@ export class TaskEngine {
     if (!result.success) {
       this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
       return this.requireTask(taskId);
+    }
+
+    // The SDK reports success when the conversation ends normally — even if the agent
+    // committed nothing. Reporting "done — branch ready" then would mislead. Gate `done` on
+    // the worktree branch having commits ahead of the base it branched from; otherwise leave
+    // the worktree in place (no teardown) for inspection and mark the task blocked.
+    const gated = this.requireTask(taskId);
+    if (baseSha !== undefined && gated.worktreePath) {
+      const committed = await this.infra.committedChanges(gated.worktreePath, baseSha);
+      if (!committed) {
+        this.store.updatePhaseRun(run.id, {
+          state: "failed",
+          summary: "session finished but committed no changes",
+          endedAt: this.now(),
+        });
+        this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
+        return this.requireTask(taskId);
+      }
     }
 
     // Mark done first — the work is committed on the branch, so a teardown failure must
