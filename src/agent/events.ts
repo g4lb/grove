@@ -29,3 +29,20 @@ export interface PhaseContext {
   /** Reviewer feedback for a re-run of this phase ("request changes"); absent on a first run. */
   feedback?: string;
 }
+
+export interface SessionContext {
+  taskId: string;
+  title: string;
+  prose: string;
+  worktreePath: string;
+  branch: string;
+  model: string;
+  superpowersPath: string;
+}
+
+export interface SessionResult {
+  success: boolean;
+  summary: string;
+  costUsd: number;
+  sessionId: string | null;
+}
