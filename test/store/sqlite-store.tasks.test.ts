@@ -12,7 +12,7 @@ test("createTask applies defaults and round-trips", () => {
   expect(task.title).toBe("add login");
   expect(task.kind).toBe("task");
   expect(task.status).toBe("running");
-  expect(task.currentPhase).toBe("brainstorm");
+  expect(task.currentPhase).toBe("session");
   expect(task.repoPath).toBe("/repo");
   expect(task.worktreePath).toBeNull();
   expect(task.createdAt).toBe("2026-06-06T00:00:00.000Z");

@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import type { AgentEvent, PhaseResult, PhaseContext } from "../../src/agent/events.ts";
+import type { AgentEvent, SessionResult, SessionContext } from "../../src/agent/events.ts";
 
 test("AgentEvent union members are constructable", () => {
   const token: AgentEvent = { type: "token", text: "hi" };
@@ -10,22 +10,22 @@ test("AgentEvent union members are constructable", () => {
   expect(notice.message).toBe("starting");
 });
 
-test("PhaseResult and PhaseContext shapes hold", () => {
-  const result: PhaseResult = {
+test("SessionResult and SessionContext shapes hold", () => {
+  const result: SessionResult = {
     success: true,
     summary: "done",
-    artifactPath: "/wt/.grove/design.md",
     costUsd: 0.01,
     sessionId: "s1",
   };
-  const ctx: PhaseContext = {
+  const ctx: SessionContext = {
     taskId: "task_1",
     title: "Add login",
-    description: "OAuth",
+    prose: "Add login with OAuth",
     worktreePath: "/wt",
+    branch: "grove/task_1",
     model: "claude-opus-4-8",
-    priorArtifacts: [{ phase: "brainstorm", path: "/wt/.grove/design.md" }],
+    superpowersPath: "/sp",
   };
   expect(result.success).toBe(true);
-  expect(ctx.priorArtifacts[0]!.phase).toBe("brainstorm");
+  expect(ctx.branch).toBe("grove/task_1");
 });
