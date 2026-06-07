@@ -42,16 +42,15 @@ test("phase runs record startedAt", async () => {
 });
 
 test("a throwing subscriber does not corrupt the task — the session still completes its run", async () => {
-  // First run fails (blocked) so resume actually re-runs the session and re-emits events.
   const { engine } = buildEngine(fail("nope", [{ type: "token", text: "hi" }]));
-  const t0 = await engine.startTask(startInput());
-  expect(t0.status).toBe("blocked");
-
   let threw = false;
-  engine.subscribe(t0.id, () => { threw = true; throw new Error("bad subscriber"); });
-  const resumed = await engine.resume(t0.id, { superpowersPath: "/sp" });
+  // The onEvent subscriber throws on every event; emit must isolate it so the run still completes.
+  const t = await engine.startTask(startInput(), () => {
+    threw = true;
+    throw new Error("bad subscriber");
+  });
   expect(threw).toBe(true);
-  expect(resumed.status).toBe("blocked"); // run completed; not left stuck in "running"
+  expect(t.status).toBe("blocked"); // run completed; not left stuck in "running"
 });
 
 test("a failing teardown still completes the task to done (does not propagate, no stuck-running)", async () => {

@@ -106,25 +106,18 @@ export class TaskEngine {
     }
   }
 
-  /** Resume a non-`done` task by re-running its autonomous session. */
-  async resume(taskId: string, input: { superpowersPath: string }): Promise<Task> {
-    const task = this.requireTask(taskId);
-    if (task.status === "done") return task;
-    return this.runSession(task.id, input.superpowersPath, task.description ?? task.title);
-  }
-
   /**
    * Run one autonomous agent session, persisting before returning.
    *
-   * `baseSha` is the repo SHA the worktree branched from at provision time; when present, a
-   * "successful" session is only reported `done` if it actually committed work onto the branch
-   * (the SDK reports success when the conversation ends normally, even with an empty branch).
+   * `baseSha` is the repo SHA the worktree branched from at provision time: a "successful"
+   * session is only reported `done` if it actually committed work onto the branch (the SDK
+   * reports success when the conversation ends normally, even with an empty branch).
    */
   protected async runSession(
     taskId: string,
     superpowersPath: string,
     prose: string,
-    baseSha?: string,
+    baseSha: string,
   ): Promise<Task> {
     const task = this.requireTask(taskId);
     this.store.updateTask(taskId, { status: "running", currentPhase: "session" });
@@ -173,7 +166,7 @@ export class TaskEngine {
     // the worktree branch having commits ahead of the base it branched from; otherwise leave
     // the worktree in place (no teardown) for inspection and mark the task blocked.
     const gated = this.requireTask(taskId);
-    if (baseSha !== undefined && gated.worktreePath) {
+    if (gated.worktreePath) {
       const committed = await this.infra.committedChanges(gated.worktreePath, baseSha);
       if (!committed) {
         this.store.updatePhaseRun(run.id, {
