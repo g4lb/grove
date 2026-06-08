@@ -42,7 +42,6 @@ export class SdkAgentRunner implements AgentRunner {
           model: ctx.model,
           maxTurns: 200,
           permissionMode: "bypassPermissions",
-          includePartialMessages: true,
           plugins: [{ type: "local", path: ctx.superpowersPath }],
           ...(this.claudePath ? { pathToClaudeCodeExecutable: this.claudePath } : {}),
           // Base env scoped to drop unrelated cloud/CI secrets (the superpowers plugin runs
@@ -57,12 +56,15 @@ export class SdkAgentRunner implements AgentRunner {
         if (m.type === "system" && m.subtype === "init") {
           sessionId = m.session_id ?? null;
           yield { type: "notice", message: "session started" };
-        } else if (m.type === "stream_event") {
-          const ev = m.event;
-          if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
-            yield { type: "token", text: ev.delta.text };
-          } else if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") {
-            yield { type: "tool_use", tool: ev.content_block.name, input: ev.content_block.input ?? {} };
+        } else if (m.type === "assistant") {
+          // The assembled assistant turn carries complete tool inputs + the agent's text. (The
+          // partial stream delivers tool_use blocks with an empty input, so we read this instead.)
+          for (const block of (m.message?.content ?? []) as Array<any>) {
+            if (block?.type === "text" && typeof block.text === "string" && block.text.trim()) {
+              yield { type: "token", text: block.text };
+            } else if (block?.type === "tool_use") {
+              yield { type: "tool_use", tool: String(block.name ?? "tool"), input: block.input ?? {} };
+            }
           }
         } else if (m.type === "result") {
           success = m.subtype === "success";

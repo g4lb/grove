@@ -34,12 +34,19 @@ async function drain(gen: AsyncGenerator<AgentEvent, any>) {
   return { seen, result: next.value };
 }
 
-test("maps stream tokens and tool_use blocks to AgentEvents and returns a success result", async () => {
+test("maps assistant text + tool_use blocks (with full input) to AgentEvents and returns a success result", async () => {
   const runner = new SdkAgentRunner({
     queryFn: fakeQuery([
       { type: "system", subtype: "init", session_id: "sess-1" },
-      { type: "stream_event", event: { type: "content_block_delta", delta: { type: "text_delta", text: "Hello" } } },
-      { type: "stream_event", event: { type: "content_block_start", content_block: { type: "tool_use", name: "Write", input: { path: "hello.txt" } } } },
+      {
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "Hello" },
+            { type: "tool_use", name: "Write", input: { file_path: "hello.txt", content: "hi" } },
+          ],
+        },
+      },
       { type: "result", subtype: "success", result: "all done", total_cost_usd: 0.02 },
     ]),
     env: { ANTHROPIC_API_KEY: "sk-test" },
@@ -48,7 +55,8 @@ test("maps stream tokens and tool_use blocks to AgentEvents and returns a succes
   const { seen, result } = await drain(runner.run(ctx()));
   expect(seen).toContainEqual({ type: "notice", message: "session started" });
   expect(seen).toContainEqual({ type: "token", text: "Hello" });
-  expect(seen).toContainEqual({ type: "tool_use", tool: "Write", input: { path: "hello.txt" } });
+  // The full tool input is carried (the partial stream would have delivered an empty input).
+  expect(seen).toContainEqual({ type: "tool_use", tool: "Write", input: { file_path: "hello.txt", content: "hi" } });
   expect(result.success).toBe(true);
   expect(result.summary).toBe("all done");
   expect(result.costUsd).toBe(0.02);
