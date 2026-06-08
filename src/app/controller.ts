@@ -1,5 +1,6 @@
 import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
+import { renderAgentEvent } from "../agent/agent-feed.ts";
 import type { StartTaskInput } from "../engine/task-engine.ts";
 
 /** The engine surface the controller needs (the real TaskEngine satisfies it). */
@@ -54,8 +55,7 @@ export class TaskRunController {
   }
 
   private onEvent = (event: AgentEvent): void => {
-    if (event.type === "tool_use") this.push(`· ${event.tool}`);
-    else if (event.type === "notice") this.push(`· ${event.message}`);
+    renderAgentEvent(event, (line) => this.push(line));
   };
 
   async start(prose: string): Promise<void> {

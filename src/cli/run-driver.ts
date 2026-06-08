@@ -1,5 +1,6 @@
 import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
+import { renderAgentEvent } from "../agent/agent-feed.ts";
 import type { StartTaskInput } from "../engine/task-engine.ts";
 import type { DiskMonitor, DiskThresholds } from "../infra/disk-monitor.ts";
 import type { GrovePaths } from "../config/paths.ts";
@@ -57,8 +58,7 @@ export async function runTask(prose: string, deps: RunDeps): Promise<RunResult> 
 
   // 3. Run one autonomous session.
   const onEvent = (event: AgentEvent): void => {
-    if (event.type === "tool_use") deps.out(`  · ${event.tool}`);
-    else if (event.type === "notice") deps.out(`  · ${event.message}`);
+    renderAgentEvent(event, (line) => deps.out(`  ${line}`));
   };
   const task = await deps.engine.startTask(
     { title: prose, description: prose, repoPath: deps.repoPath, kind: "task", superpowersPath: deps.superpowersPath },
