@@ -1,6 +1,6 @@
 import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
-import { renderAgentEvent, mergeUsage, formatStats, type SessionStats } from "../agent/agent-feed.ts";
+import { renderAgentEvent, mergeUsage, formatStats, branchActions, type SessionStats } from "../agent/agent-feed.ts";
 import type { StartTaskInput } from "../engine/task-engine.ts";
 import type { DiskMonitor, DiskThresholds } from "../infra/disk-monitor.ts";
 import type { GrovePaths } from "../config/paths.ts";
@@ -70,14 +70,17 @@ export async function runTask(prose: string, deps: RunDeps): Promise<RunResult> 
     onEvent,
   );
 
-  // 4. Terminal.
+  // 4. Terminal — report the outcome + how to get the work out of the isolated branch.
   const s = formatStats(stats);
   const tail = s ? ` · ${s}` : "";
   if (task.status === "done") {
-    return { ok: true, taskId: task.id, status: "done", message: `done — branch ${task.branch ?? "?"} is ready${tail}` };
+    const lines = [`done — branch ${task.branch ?? "?"} is ready${tail}`, ...branchActions(task.branch ?? "?", task.worktreePath)];
+    return { ok: true, taskId: task.id, status: "done", message: lines.join("\n") };
   }
   if (task.status === "blocked") {
-    return { ok: false, taskId: task.id, status: "blocked", message: `blocked — the session did not complete${tail}` };
+    const extra = task.branch ? branchActions(task.branch, task.worktreePath) : [];
+    const lines = [`blocked — the session did not complete${tail}`, ...extra];
+    return { ok: false, taskId: task.id, status: "blocked", message: lines.join("\n") };
   }
   return { ok: true, taskId: task.id, status: task.status, message: task.status };
 }

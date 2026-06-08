@@ -107,6 +107,17 @@ function fmtDuration(s: number): string {
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+/**
+ * How to get the work out of an isolated task branch: review the diff, merge it, or open the
+ * worktree. The branch lives in grove's worktree but shares your repo's git, so these run from
+ * your repo. (grove stays local — no push/PR unless you do it.)
+ */
+export function branchActions(branch: string, worktreePath: string | null): string[] {
+  const lines = [`  review: git diff HEAD..${branch}`, `  merge:  git merge ${branch}`];
+  if (worktreePath) lines.push(`  open:   ${worktreePath}`);
+  return lines;
+}
+
 /** A one-line `1m 8s · 14.2k ctx · 6 turns · $0.09` status, scaled to whatever fields are present. */
 export function formatStats(s: SessionStats | null, elapsedSec?: number): string {
   const parts: string[] = [];

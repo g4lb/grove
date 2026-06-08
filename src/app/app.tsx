@@ -171,15 +171,27 @@ export function App({ controller }: AppProps): React.ReactElement {
         </Text>
       )}
 
-      {terminal && view.message.length > 0 && (
-        <Text>
-          <Text color={view.state === "done" ? "green" : view.state === "blocked" ? "red" : "yellow"}>
-            {view.state === "done" ? "✓ " : view.state === "blocked" ? "✗ " : "■ "}
-          </Text>
-          {view.message}
-          <Text dimColor>{statusTail(true)}</Text>
-        </Text>
-      )}
+      {terminal &&
+        view.message.length > 0 &&
+        (() => {
+          const [first, ...rest] = view.message.split("\n");
+          return (
+            <Box flexDirection="column">
+              <Text>
+                <Text color={view.state === "done" ? "green" : view.state === "blocked" ? "red" : "yellow"}>
+                  {view.state === "done" ? "✓ " : view.state === "blocked" ? "✗ " : "■ "}
+                </Text>
+                {first}
+                <Text dimColor>{statusTail(true)}</Text>
+              </Text>
+              {rest.map((l, i) => (
+                <Text key={i} dimColor>
+                  {l}
+                </Text>
+              ))}
+            </Box>
+          );
+        })()}
 
       {terminal && <Text dimColor>enter: new prompt · q: quit</Text>}
 

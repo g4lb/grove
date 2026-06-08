@@ -1,5 +1,17 @@
 import { test, expect } from "bun:test";
-import { describeToolUse, renderAgentEvent, mergeUsage, formatStats } from "../../src/agent/agent-feed.ts";
+import { describeToolUse, renderAgentEvent, mergeUsage, formatStats, branchActions } from "../../src/agent/agent-feed.ts";
+
+test("branchActions shows how to review, merge, and open the isolated branch", () => {
+  expect(branchActions("grove/abc", "/wt")).toEqual([
+    "  review: git diff HEAD..grove/abc",
+    "  merge:  git merge grove/abc",
+    "  open:   /wt",
+  ]);
+  expect(branchActions("grove/abc", null)).toEqual([
+    "  review: git diff HEAD..grove/abc",
+    "  merge:  git merge grove/abc",
+  ]);
+});
 
 test("mergeUsage overwrites only the fields a usage event carries", () => {
   let s = mergeUsage(null, { contextTokens: 1000, outputTokens: 50 });

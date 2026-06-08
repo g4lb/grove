@@ -1,6 +1,6 @@
 import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
-import { renderAgentEvent, mergeUsage, type SessionStats } from "../agent/agent-feed.ts";
+import { renderAgentEvent, mergeUsage, branchActions, type SessionStats } from "../agent/agent-feed.ts";
 import type { StartTaskInput } from "../engine/task-engine.ts";
 
 /** The engine surface the controller needs (the real TaskEngine satisfies it). */
@@ -134,9 +134,14 @@ export class TaskRunController {
 
   private applyTask(task: Task): void {
     let message = "";
-    if (task.status === "done") message = `done — branch ${task.branch ?? "?"} is ready`;
-    else if (task.status === "blocked") message = "blocked — the session did not complete";
-    else if (task.status === "stopped") message = "stopped";
+    if (task.status === "done") {
+      message = [`done — branch ${task.branch ?? "?"} is ready`, ...branchActions(task.branch ?? "?", task.worktreePath)].join("\n");
+    } else if (task.status === "blocked") {
+      const extra = task.branch ? branchActions(task.branch, task.worktreePath) : [];
+      message = ["blocked — the session did not complete", ...extra].join("\n");
+    } else if (task.status === "stopped") {
+      message = "stopped";
+    }
     this.set({ state: task.status as RunState, task, message });
   }
 }
