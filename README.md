@@ -2,7 +2,7 @@
 
 # grove
 
-**Hand a task to an AI agent and get working code back — each task built in its own isolated git worktree + Docker environment, with a human checkpoint at every step.**
+**Hand a task to an AI agent and get a committed branch back — built autonomously in its own isolated git worktree + Docker environment, driven by the [obra/superpowers](https://github.com/obra/superpowers) methodology.**
 
 [![release](https://img.shields.io/github/v/release/g4lb/grove?sort=semver)](https://github.com/g4lb/grove/releases)
 [![ci](https://github.com/g4lb/grove/actions/workflows/ci.yml/badge.svg)](https://github.com/g4lb/grove/actions/workflows/ci.yml)
@@ -10,12 +10,12 @@
 
 </div>
 
-grove is a terminal-native CLI that turns a plain-English request into a gated build workflow run by the Claude agent. You describe what you want; grove plans it, writes it, and reviews it — pausing for your approval at each checkpoint — all inside a throwaway worktree so your main branch is never touched.
+grove is a terminal-native CLI that turns a plain-English request into an autonomous build run by the Claude agent. You describe what you want; grove provisions a throwaway worktree, hands the task to one agent session running the superpowers skills — which brainstorms, plans, implements test-first, reviews, and commits on its own — then leaves you a branch to review. Your main branch is never touched.
 
 - **Isolated** — every task gets its own git worktree and Docker Compose project; nothing leaks into your working tree, and `grove gc` reclaims the leftovers.
-- **Gated** — the agent stops after brainstorm, after the plan, and before finishing, so you approve, request changes, or stop. No surprise commits.
-- **Two ways in** — an interactive TUI and a headless `grove run` (for scripts and CI), both over the same crash-safe engine.
-- **Bring your own Claude** — reuses your existing Claude Code login and `claude` binary; no extra keys, no redundant downloads.
+- **Autonomous** — one agent session takes the task from idea to a committed change using the `obra/superpowers` methodology (brainstorm → plan → TDD → review → commit). No phases to babysit, no gates to click through.
+- **Verified done** — grove only reports `done` once real commits land on the task branch; a session that finishes without committing is `blocked`, with its worktree left in place for you to inspect.
+- **Bring your own Claude** — reuses your existing Claude Code login and `claude` binary; the superpowers skills are reused from your install or fetched once. No extra keys, no redundant downloads.
 
 ## Install
 
@@ -41,19 +41,17 @@ grove
 
 ```
 › add a /health endpoint that returns 200
-  detected: task
-  · Write  · Edit
-  gate — plan done
-  [a]pprove / [r]equest changes / [s]top
+  · session started
+  · Write  · Edit  · Bash
+  done — branch grove/health-endpoint is ready
 ```
 
-Approve (`a`), send it back with feedback (`r`), or stop (`s`) at each gate. Type `/list` for the task dashboard and `/open <id>` to revisit one.
+grove streams the agent's live progress, then hands you the finished branch. Type `/list` for the task dashboard and `/open <id>` to revisit one.
 
 Or run it headlessly:
 
 ```sh
-grove run "fix the flaky logout test"          # interactive gates on stdin
-grove run "fix the flaky logout test" --yes    # auto-approve every gate
+grove run "fix the flaky logout test"
 ```
 
 Other commands:
@@ -70,20 +68,18 @@ grove drives the Claude agent, so it needs an Anthropic credential. The simplest
 
 ## How it works
 
-Each task moves through five phases, with your sign-off at three gates:
+A task is one autonomous agent session, bracketed by grove's isolation:
 
 ```
-brainstorm ─▸│gate│─▸ plan ─▸│gate│─▸ execute ─▸ review ─▸│gate│─▸ finish
+provision ─▸ autonomous superpowers session ─▸ done (committed) │ blocked ─▸ teardown
 ```
 
 1. **Provision** — grove creates a git worktree (branch `grove/<task>`) and a Docker Compose project for the task, isolated from everything else.
-2. **Brainstorm** — the agent explores the request and writes a short design; grove pauses for your approval.
-3. **Plan** — it turns the design into a step-by-step implementation plan; you approve it or send it back.
-4. **Execute & review** — it implements the plan, then reviews its own diff.
-5. **Finish** — after your final approval, grove wraps up and tears the environment down.
-6. **Recover** — every transition is persisted before it returns, so a crashed or stopped task can be resumed, and `grove gc` cleans up anything orphaned.
+2. **Run** — grove loads the `obra/superpowers` plugin into one Claude session (resolving it from your Claude Code install, or fetching the pinned version into `~/.grove/plugins` the first time) and hands it the task. The agent applies the methodology — brainstorm the approach, write a plan, implement it test-first, review, and commit — fully autonomously, while grove streams its progress.
+3. **Verify** — when the session ends, grove checks the task branch for commits. Commits landed → `done`, branch ready for review, environment torn down. Nothing committed (or an error) → `blocked`, worktree preserved so you can look.
+4. **Recover** — every transition is persisted before it returns and runs crash-safe, so a failed provision, agent error, or teardown failure can never strand a task; `grove gc` cleans up anything orphaned.
 
-The engine sits behind swappable interfaces (store, agent, router, infra), so the TUI and the headless runner are just two clients of the same core.
+The engine sits behind swappable interfaces (store, agent, infra), so the TUI and the headless runner are just two clients of the same core.
 
 ## Configuration
 
@@ -91,14 +87,16 @@ grove keeps its state under `~/.grove` (override with `GROVE_HOME`):
 
 ```
 ~/.grove/
-  grove.db          # SQLite task store
-  tasks/            # per-task worktrees + artifacts
-  runtime/claude    # the native claude binary
-  config.json       # disk thresholds, agent model
+  grove.db            # SQLite task store
+  tasks/              # per-task worktrees
+  plugins/superpowers # the superpowers skills (when grove fetches its own copy)
+  runtime/claude      # the native claude binary
+  config.json         # disk thresholds, agent model
 ```
 
 - `ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` — an Anthropic credential (or just log into Claude Code).
 - `GROVE_CLAUDE_PATH` — point grove at a specific `claude` binary.
+- `GROVE_SUPERPOWERS_PATH` — point grove at a specific superpowers plugin directory.
 - `GROVE_HOME` — grove's home directory.
 
 ## Building
@@ -107,7 +105,7 @@ grove is Bun + TypeScript, compiled to a single binary; the TUI is Ink (React fo
 
 ```sh
 bun install
-bun test            # ~260 tests
+bun test            # ~250 tests
 bun run typecheck
 bun run build       # → dist/grove
 bun run build:all   # cross-compile all four targets + checksums
@@ -117,4 +115,4 @@ Releases are cut by pushing a `v*` tag, which builds the four binaries and publi
 
 ## Status
 
-`v0.1.x` ships the full build workflow, the TUI and headless runner, worktree + Compose isolation, and the install tooling. Next: a debug workflow (investigate → reproduce → fix → verify), an LLM-backed intent router, and Windows support.
+`v0.2` replaces grove's earlier gated five-phase workflow with a single autonomous session driven by `obra/superpowers` — keeping the worktree + Compose isolation, the crash-safe engine, and the install tooling. Next: a turn/cost budget, an operator escape hatch for stuck tasks, and Windows support.
