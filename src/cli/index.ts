@@ -34,7 +34,7 @@ import { TaskRunController } from "../app/controller.ts";
 const VERSION = "0.2.0";
 
 function printUsage(): void {
-  console.log('grove — usage: grove [run "<prose>" | init | gc [--yes] | doctor | install-runtime | --version]');
+  console.log('grove — usage: grove [run "<prose>" | init | gc [--yes] [--include-blocked] | doctor | install-runtime | --version]');
 }
 
 function grovePaths() {
@@ -156,6 +156,7 @@ async function main(argv: string[]): Promise<number> {
     }
     case "gc": {
       const yes = argv.includes("--yes");
+      const includeBlocked = argv.includes("--include-blocked");
       const paths = grovePaths();
       const runner = new BunCommandRunner();
       // Ensure the grove home exists so SqliteStore.open can create the db file
@@ -170,19 +171,21 @@ async function main(argv: string[]): Promise<number> {
         const deps = gcDeps(paths, store, docker, worktrees, compose);
 
         const candidates = await deps.discover();
-        const orphans = findOrphans(candidates, { statusOf: deps.statusOf });
+        const orphans = findOrphans(candidates, { statusOf: deps.statusOf }, { includeBlocked });
 
         if (orphans.length === 0) {
-          console.log("grove gc: nothing to reclaim.");
+          const hint = includeBlocked ? "" : " (use --include-blocked to also reclaim failed/blocked tasks)";
+          console.log(`grove gc: nothing to reclaim.${hint}`);
           return 0;
         }
-        console.log(`grove gc will reclaim ${orphans.length} orphaned task(s):`);
+        const scope = includeBlocked ? "orphaned/blocked" : "orphaned";
+        console.log(`grove gc will reclaim ${orphans.length} ${scope} task(s):`);
         for (const id of orphans) console.log(`  - ${id}`);
         if (!yes) {
           console.log("\nRe-run with --yes to reclaim them.");
           return 0;
         }
-        const report = await runGc(deps);
+        const report = await runGc(deps, { includeBlocked });
         console.log(`\nReclaimed ${report.reclaimed.length}, kept ${report.kept.length}, errors ${report.errors.length}.`);
         for (const e of report.errors) console.log(`  ! ${e.taskId}: ${e.message}`);
         return report.errors.length === 0 ? 0 : 1;
