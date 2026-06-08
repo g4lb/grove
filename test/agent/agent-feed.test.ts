@@ -55,11 +55,23 @@ test("renderAgentEvent emits notices, narration lines, and tool calls", () => {
   renderAgentEvent({ type: "token", text: "I'll create the file.\nThen commit it." }, emit);
   renderAgentEvent({ type: "tool_use", tool: "Write", input: { file_path: "hello.txt" } }, emit);
   expect(lines).toEqual([
-    "· session started",
+    "● session started",
     "I'll create the file.",
     "Then commit it.",
-    "· Write(hello.txt)",
+    "● Write(hello.txt)",
   ]);
+});
+
+test("renderAgentEvent shows a tool result as a truncated ⎿ line with a +N lines hint", () => {
+  const lines: string[] = [];
+  renderAgentEvent({ type: "tool_result", output: "first line of output\nsecond\nthird" }, (l) => lines.push(l));
+  expect(lines).toEqual(["  ⎿ first line of output", "     … +2 lines"]);
+});
+
+test("renderAgentEvent shows a one-line tool result with no +N hint", () => {
+  const lines: string[] = [];
+  renderAgentEvent({ type: "tool_result", output: "ok\n" }, (l) => lines.push(l));
+  expect(lines).toEqual(["  ⎿ ok"]);
 });
 
 test("renderAgentEvent skips blank narration", () => {

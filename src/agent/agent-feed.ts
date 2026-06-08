@@ -69,9 +69,15 @@ export function renderAgentEvent(event: AgentEvent, emit: (line: string) => void
       if (line.trim()) emit(line);
     }
   } else if (event.type === "tool_use") {
-    emit(`· ${describeToolUse(event.tool, event.input)}`);
+    emit(`● ${describeToolUse(event.tool, event.input)}`);
   } else if (event.type === "notice") {
-    emit(`· ${event.message}`);
+    emit(`● ${event.message}`);
+  } else if (event.type === "tool_result") {
+    const lines = event.output.split("\n").map((l) => l.replace(/\s+$/, "")).filter((l) => l.trim().length > 0);
+    if (lines.length === 0) return;
+    emit(`  ⎿ ${clip(lines[0]!)}`);
+    const extra = lines.length - 1;
+    if (extra > 0) emit(`     … +${extra} line${extra === 1 ? "" : "s"}`);
   }
 }
 
@@ -97,10 +103,14 @@ function compact(n: number): string {
   return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
 }
 
-/** A one-line `12s · 14.2k ctx · 6 turns · $0.09` status, scaled to whatever fields are present. */
+function fmtDuration(s: number): string {
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+/** A one-line `1m 8s · 14.2k ctx · 6 turns · $0.09` status, scaled to whatever fields are present. */
 export function formatStats(s: SessionStats | null, elapsedSec?: number): string {
   const parts: string[] = [];
-  if (elapsedSec !== undefined) parts.push(`${elapsedSec}s`);
+  if (elapsedSec !== undefined) parts.push(fmtDuration(elapsedSec));
   if (s?.contextTokens) parts.push(`${compact(s.contextTokens)} ctx`);
   if (s?.turns) parts.push(`${s.turns} turn${s.turns === 1 ? "" : "s"}`);
   if (s?.costUsd) parts.push(`$${s.costUsd.toFixed(s.costUsd < 0.01 ? 4 : 2)}`);

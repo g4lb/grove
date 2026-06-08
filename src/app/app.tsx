@@ -10,19 +10,22 @@ export interface AppProps {
   > & { onChange: () => void };
 }
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER = ["✶", "✸", "✹", "✺", "✹", "✷"];
 
-/** One feed line, highlighted Claude-Code style: actions (`· …`) stand out, narration is dimmed. */
+/** One feed line, Claude-Code style: actions get a green `●`, tool results dim under `⎿`, narration plain. */
 function FeedLine({ line }: { line: string }): React.ReactElement {
-  if (line.startsWith("· ")) {
+  if (line.startsWith("● ")) {
     return (
       <Text>
-        <Text color="cyan">· </Text>
-        {line.slice(2)}
+        <Text color="green">●</Text>
+        {line.slice(1)}
       </Text>
     );
   }
-  return <Text dimColor>{line}</Text>;
+  if (line.startsWith("  ⎿ ") || line.trimStart().startsWith("… +")) {
+    return <Text dimColor>{line}</Text>;
+  }
+  return <Text>{line}</Text>;
 }
 
 export function App({ controller }: AppProps): React.ReactElement {
@@ -70,6 +73,14 @@ export function App({ controller }: AppProps): React.ReactElement {
     elapsedRef.current = 0;
   }
   const elapsed = elapsedRef.current;
+
+  // Blinking cursor for the idle input box.
+  const [cursorOn, setCursorOn] = useState(true);
+  useEffect(() => {
+    if (view.state !== "idle") return;
+    const id = setInterval(() => setCursorOn((c) => !c), 530);
+    return () => clearInterval(id);
+  }, [view.state]);
   const statusTail = (withElapsed: boolean): string => {
     const s = formatStats(view.stats, withElapsed ? elapsed : undefined);
     return s ? ` · ${s}` : "";
@@ -131,18 +142,14 @@ export function App({ controller }: AppProps): React.ReactElement {
         grove
       </Text>
 
-      {view.state === "idle" &&
-        (input ? (
-          <Text>
-            {"› "}
-            <Text color="cyan">{input}</Text>
-          </Text>
-        ) : (
-          <Text>
-            {"› "}
-            <Text dimColor>what do you want to work on?</Text>
-          </Text>
-        ))}
+      {view.state === "idle" && (
+        <Box borderStyle="round" borderColor="gray" paddingX={1}>
+          <Text color="gray">{"› "}</Text>
+          <Text>{input}</Text>
+          <Text inverse={cursorOn}> </Text>
+          {!input && <Text dimColor> what do you want to work on?</Text>}
+        </Box>
+      )}
 
       {view.prompt.length > 0 && view.state !== "idle" && (
         <Text>
@@ -158,9 +165,9 @@ export function App({ controller }: AppProps): React.ReactElement {
       ))}
 
       {running && (
-        <Text color="magenta">
-          {SPINNER[frameRef.current]} working
-          <Text dimColor>{statusTail(true)} · esc to interrupt</Text>
+        <Text>
+          <Text color="magenta">{SPINNER[frameRef.current]} Working… </Text>
+          <Text dimColor>({formatStats(view.stats, elapsed)})</Text>
         </Text>
       )}
 

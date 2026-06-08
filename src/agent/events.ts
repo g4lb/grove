@@ -2,6 +2,7 @@
 export type AgentEvent =
   | { type: "token"; text: string }
   | { type: "tool_use"; tool: string; input: unknown }
+  | { type: "tool_result"; output: string }
   | { type: "notice"; message: string }
   /** Running usage/cost, for a live status line. Fields are optional — clients merge what's set. */
   | { type: "usage"; contextTokens?: number; outputTokens?: number; costUsd?: number; turns?: number };

@@ -48,7 +48,7 @@ test("renders the live feed while running", () => {
     state: "running",
     task: null,
     prompt: "add a settings page",
-    feed: ["· Write", "· Edit"],
+    feed: ["● Write(hello.txt)", "● Bash(git commit)"],
     stats: null,
     message: "",
     tasks: [],
@@ -57,7 +57,7 @@ test("renders the live feed while running", () => {
   });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
-  expect(frame).toContain("· Write");
+  expect(frame).toContain("Write(hello.txt)");
   expect(frame.toLowerCase()).toContain("working");
 });
 

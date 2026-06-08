@@ -76,6 +76,19 @@ export class SdkAgentRunner implements AgentRunner {
               outputTokens: u.output_tokens ?? 0,
             };
           }
+        } else if (m.type === "user") {
+          // Tool results come back as a user message; surface a brief summary under the call.
+          for (const block of (m.message?.content ?? []) as Array<any>) {
+            if (block?.type !== "tool_result") continue;
+            const c = block.content;
+            const text =
+              typeof c === "string"
+                ? c
+                : Array.isArray(c)
+                  ? c.filter((b: any) => b?.type === "text").map((b: any) => b.text).join("\n")
+                  : "";
+            if (text.trim()) yield { type: "tool_result", output: text };
+          }
         } else if (m.type === "result") {
           success = m.subtype === "success";
           summary = m.result ?? m.subtype ?? "";
