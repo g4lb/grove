@@ -32,7 +32,7 @@ test("FakeAgentRunner yields scripted events and returns the scripted result", a
 
   const { seen, result } = await drain(runner.run(ctx));
   expect(seen).toEqual(events);
-  expect(result).toEqual({ success: true, summary: "designed", costUsd: 0, sessionId: "s" });
+  expect(result).toEqual({ success: true, summary: "designed", costUsd: 0, turns: 0, sessionId: "s" });
 });
 
 test("FakeAgentRunner records the contexts it received", async () => {

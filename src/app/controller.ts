@@ -1,6 +1,6 @@
 import type { Task } from "../domain/types.ts";
 import type { AgentEvent } from "../agent/events.ts";
-import { renderAgentEvent } from "../agent/agent-feed.ts";
+import { renderAgentEvent, mergeUsage, type SessionStats } from "../agent/agent-feed.ts";
 import type { StartTaskInput } from "../engine/task-engine.ts";
 
 /** The engine surface the controller needs (the real TaskEngine satisfies it). */
@@ -14,7 +14,11 @@ export interface ControllerView {
   mode: "prompt" | "list";
   state: RunState;
   task: Task | null;
+  /** The user's submitted request, kept visible above the feed. */
+  prompt: string;
   feed: string[];
+  /** Running usage/cost for the live status line (null until the first usage event). */
+  stats: SessionStats | null;
   message: string;
   tasks: Task[];
   selected: number;
@@ -32,7 +36,7 @@ export class TaskRunController {
     this.lister = lister;
   }
 
-  private view: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
+  private view: ControllerView = { mode: "prompt", state: "idle", task: null, prompt: "", feed: [], stats: null, message: "", tasks: [], selected: 0, viewing: false };
 
   constructor(
     private engine: ControllerEngine,
@@ -55,12 +59,17 @@ export class TaskRunController {
   }
 
   private onEvent = (event: AgentEvent): void => {
+    if (event.type === "usage") {
+      this.view.stats = mergeUsage(this.view.stats, event);
+      this.onChange();
+      return;
+    }
     renderAgentEvent(event, (line) => this.push(line));
   };
 
   async start(prose: string): Promise<void> {
     if (this.view.state === "running") return;
-    this.set({ state: "running", message: "", feed: [], viewing: false, task: null });
+    this.set({ state: "running", prompt: prose, message: "", feed: [], stats: null, viewing: false, task: null });
     try {
       const task = await this.engine.startTask(
         { title: prose, description: prose, repoPath: this.repoPath, kind: "task", superpowersPath: this.superpowersPath },
@@ -115,11 +124,11 @@ export class TaskRunController {
   }
 
   backToPrompt(): void {
-    this.set({ mode: "prompt", state: "idle", task: null, message: "", feed: [], viewing: false });
+    this.set({ mode: "prompt", state: "idle", task: null, prompt: "", message: "", feed: [], stats: null, viewing: false });
   }
 
   private loadTask(t: Task): void {
-    this.view = { ...this.view, mode: "prompt", task: t, viewing: true };
+    this.view = { ...this.view, mode: "prompt", task: t, prompt: t.title, viewing: true };
     this.applyTask(t);
   }
 

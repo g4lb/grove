@@ -1,5 +1,27 @@
 import { test, expect } from "bun:test";
-import { describeToolUse, renderAgentEvent } from "../../src/agent/agent-feed.ts";
+import { describeToolUse, renderAgentEvent, mergeUsage, formatStats } from "../../src/agent/agent-feed.ts";
+
+test("mergeUsage overwrites only the fields a usage event carries", () => {
+  let s = mergeUsage(null, { contextTokens: 1000, outputTokens: 50 });
+  expect(s).toEqual({ contextTokens: 1000, outputTokens: 50 });
+  s = mergeUsage(s, { costUsd: 0.04, turns: 3 });
+  expect(s).toEqual({ contextTokens: 1000, outputTokens: 50, costUsd: 0.04, turns: 3 });
+  s = mergeUsage(s, { contextTokens: 2000 });
+  expect(s.contextTokens).toBe(2000);
+  expect(s.costUsd).toBe(0.04); // preserved
+});
+
+test("formatStats renders a compact status line scaled to present fields", () => {
+  expect(formatStats({ contextTokens: 14200, costUsd: 0.09, turns: 6 }, 12)).toBe("12s · 14.2k ctx · 6 turns · $0.09");
+  expect(formatStats({ turns: 1 })).toBe("1 turn");
+  expect(formatStats(null)).toBe("");
+});
+
+test("renderAgentEvent emits nothing for usage events (they drive the status line, not the feed)", () => {
+  const lines: string[] = [];
+  renderAgentEvent({ type: "usage", contextTokens: 100, costUsd: 0.01 }, (l) => lines.push(l));
+  expect(lines).toEqual([]);
+});
 
 test("describeToolUse summarizes common tools claude-code style", () => {
   expect(describeToolUse("Bash", { command: "git add . && git commit -m x" })).toBe(

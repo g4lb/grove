@@ -31,6 +31,7 @@ export class SdkAgentRunner implements AgentRunner {
     let sessionId: string | null = null;
     let summary = "";
     let costUsd = 0;
+    let turns = 0;
     let success = false;
 
     try {
@@ -66,10 +67,21 @@ export class SdkAgentRunner implements AgentRunner {
               yield { type: "tool_use", tool: String(block.name ?? "tool"), input: block.input ?? {} };
             }
           }
+          const u = m.message?.usage;
+          if (u) {
+            // Live context size = the full prompt for this turn (incl. cached context).
+            yield {
+              type: "usage",
+              contextTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
+              outputTokens: u.output_tokens ?? 0,
+            };
+          }
         } else if (m.type === "result") {
           success = m.subtype === "success";
           summary = m.result ?? m.subtype ?? "";
           costUsd = m.total_cost_usd ?? 0;
+          turns = m.num_turns ?? 0;
+          yield { type: "usage", costUsd, turns };
         }
       }
     } catch (err) {
@@ -79,10 +91,11 @@ export class SdkAgentRunner implements AgentRunner {
         success: false,
         summary: `session error: ${err instanceof Error ? err.message : String(err)}`,
         costUsd,
+        turns,
         sessionId,
       };
     }
 
-    return { success, summary, costUsd, sessionId };
+    return { success, summary, costUsd, turns, sessionId };
   }
 }

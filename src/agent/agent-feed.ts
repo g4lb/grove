@@ -60,6 +60,7 @@ export function describeToolUse(tool: string, input: unknown): string {
 /**
  * Render one agent event into human-readable feed lines (Claude-Code style):
  * tool calls and notices get a `· ` bullet; the agent's narration is shown as plain lines.
+ * `usage` events carry no text — they feed the live status line, not the scrollback.
  */
 export function renderAgentEvent(event: AgentEvent, emit: (line: string) => void): void {
   if (event.type === "token") {
@@ -72,4 +73,36 @@ export function renderAgentEvent(event: AgentEvent, emit: (line: string) => void
   } else if (event.type === "notice") {
     emit(`· ${event.message}`);
   }
+}
+
+/** Running usage/cost for the live status line. */
+export interface SessionStats {
+  contextTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+  turns?: number;
+}
+
+/** Merge a usage event into the accumulated stats, overwriting only the fields it carries. */
+export function mergeUsage(prev: SessionStats | null, e: SessionStats): SessionStats {
+  const next: SessionStats = { ...(prev ?? {}) };
+  if (e.contextTokens !== undefined) next.contextTokens = e.contextTokens;
+  if (e.outputTokens !== undefined) next.outputTokens = e.outputTokens;
+  if (e.costUsd !== undefined) next.costUsd = e.costUsd;
+  if (e.turns !== undefined) next.turns = e.turns;
+  return next;
+}
+
+function compact(n: number): string {
+  return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+}
+
+/** A one-line `12s · 14.2k ctx · 6 turns · $0.09` status, scaled to whatever fields are present. */
+export function formatStats(s: SessionStats | null, elapsedSec?: number): string {
+  const parts: string[] = [];
+  if (elapsedSec !== undefined) parts.push(`${elapsedSec}s`);
+  if (s?.contextTokens) parts.push(`${compact(s.contextTokens)} ctx`);
+  if (s?.turns) parts.push(`${s.turns} turn${s.turns === 1 ? "" : "s"}`);
+  if (s?.costUsd) parts.push(`$${s.costUsd.toFixed(s.costUsd < 0.01 ? 4 : 2)}`);
+  return parts.join(" · ");
 }
