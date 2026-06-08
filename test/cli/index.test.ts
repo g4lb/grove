@@ -13,7 +13,7 @@ async function runCli(args: string[]) {
 test("--version prints the version and exits 0", async () => {
   const { code, stdout } = await runCli(["--version"]);
   expect(code).toBe(0);
-  expect(stdout.trim()).toBe("0.1.2");
+  expect(stdout.trim()).toBe("0.2.0");
 });
 
 test("doctor runs and exits (0 or 1) with per-dependency lines", async () => {
