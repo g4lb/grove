@@ -182,7 +182,7 @@ export function App({ controller }: AppProps): React.ReactElement {
                   {view.state === "done" ? "✓ " : view.state === "blocked" ? "✗ " : "■ "}
                 </Text>
                 {first}
-                <Text dimColor>{statusTail(true)}</Text>
+                {view.stats && <Text dimColor>{statusTail(true)}</Text>}
               </Text>
               {rest.map((l, i) => (
                 <Text key={i} dimColor>
