@@ -1,52 +1,49 @@
 import { test, expect } from "bun:test";
-import { FakeAgentRunner } from "../../src/agent/fake-agent-runner.ts";
-import type { AgentEvent, PhaseContext, PhaseResult } from "../../src/agent/events.ts";
+import { FakeAgentRunner, ok, fail } from "../../src/agent/fake-agent-runner.ts";
+import type { AgentEvent, SessionContext } from "../../src/agent/events.ts";
 
-const ctx: PhaseContext = {
+const ctx: SessionContext = {
   taskId: "task_1",
   title: "x",
+  prose: "do the thing",
   worktreePath: "/wt",
+  branch: "grove/task_1",
   model: "m",
-  priorArtifacts: [],
+  superpowersPath: "/sp",
 };
 
-test("FakeAgentRunner yields scripted events and returns the scripted result", async () => {
-  const events: AgentEvent[] = [
-    { type: "notice", message: "start" },
-    { type: "token", text: "hello" },
-    { type: "tool_use", tool: "Write", input: { path: ".grove/design.md" } },
-  ];
-  const result: PhaseResult = {
-    success: true,
-    summary: "designed",
-    artifactPath: "/wt/.grove/design.md",
-    costUsd: 0,
-    sessionId: "s1",
-  };
-  const runner = new FakeAgentRunner({ brainstorm: { events, result } });
-
+async function drain(gen: AsyncGenerator<AgentEvent, any>) {
   const seen: AgentEvent[] = [];
-  const gen = runner.run("brainstorm", ctx);
   let next = await gen.next();
   while (!next.done) {
     seen.push(next.value);
     next = await gen.next();
   }
+  return { seen, result: next.value };
+}
+
+test("FakeAgentRunner yields scripted events and returns the scripted result", async () => {
+  const events: AgentEvent[] = [
+    { type: "notice", message: "start" },
+    { type: "token", text: "hello" },
+    { type: "tool_use", tool: "Write", input: { path: "hello.txt" } },
+  ];
+  const runner = new FakeAgentRunner(ok("designed", events));
+
+  const { seen, result } = await drain(runner.run(ctx));
   expect(seen).toEqual(events);
-  expect(next.value).toEqual(result);
+  expect(result).toEqual({ success: true, summary: "designed", costUsd: 0, sessionId: "s" });
 });
 
-test("FakeAgentRunner records the calls it received", async () => {
-  const runner = new FakeAgentRunner({
-    plan: { events: [], result: { success: true, summary: "", artifactPath: null, costUsd: 0, sessionId: null } },
-  });
-  const gen = runner.run("plan", ctx);
-  while (!(await gen.next()).done) { /* drain */ }
-  expect(runner.calls).toEqual([{ phase: "plan", taskId: "task_1" }]);
+test("FakeAgentRunner records the contexts it received", async () => {
+  const runner = new FakeAgentRunner(ok());
+  await drain(runner.run(ctx));
+  expect(runner.contexts).toEqual([ctx]);
 });
 
-test("FakeAgentRunner throws for an unscripted phase", async () => {
-  const runner = new FakeAgentRunner({});
-  const gen = runner.run("execute", ctx);
-  await expect(gen.next()).rejects.toThrow("no script for phase: execute");
+test("fail() produces a failed session result", async () => {
+  const runner = new FakeAgentRunner(fail("nope"));
+  const { result } = await drain(runner.run(ctx));
+  expect(result.success).toBe(false);
+  expect(result.summary).toBe("nope");
 });

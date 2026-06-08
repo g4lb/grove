@@ -13,15 +13,15 @@ test("findOrphans reclaims tasks absent from the store", () => {
 test("findOrphans reclaims terminal tasks (done/stopped)", () => {
   const orphans = findOrphans(
     ["task_a", "task_b", "task_c"],
-    lookup({ task_a: "done", task_b: "stopped", task_c: "waiting_confirm" }),
+    lookup({ task_a: "done", task_b: "stopped", task_c: "running" }),
   );
   expect(orphans.sort()).toEqual(["task_a", "task_b"]);
 });
 
-test("findOrphans keeps running/blocked/waiting tasks", () => {
+test("findOrphans keeps running/blocked tasks", () => {
   const orphans = findOrphans(
-    ["task_a", "task_b", "task_c"],
-    lookup({ task_a: "running", task_b: "blocked", task_c: "waiting_confirm" }),
+    ["task_a", "task_b"],
+    lookup({ task_a: "running", task_b: "blocked" }),
   );
   expect(orphans).toEqual([]);
 });

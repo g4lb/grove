@@ -1,10 +1,10 @@
 import { test, expect } from "bun:test";
-import { buildEngine, ok } from "./helpers.ts";
+import { buildEngine, startInput, ok } from "./helpers.ts";
 
 test("listTasks returns all created tasks", async () => {
-  const { engine } = buildEngine({ brainstorm: ok("brainstorm", "/wt/.grove/design.md") });
-  await engine.startTask({ title: "first task", repoPath: "/r", kind: "task" });
-  await engine.startTask({ title: "second task", repoPath: "/r", kind: "task" });
+  const { engine } = buildEngine(ok());
+  await engine.startTask(startInput({ title: "first task" }));
+  await engine.startTask(startInput({ title: "second task" }));
 
   const tasks = engine.listTasks();
   expect(tasks.length).toBe(2);
@@ -14,6 +14,6 @@ test("listTasks returns all created tasks", async () => {
 });
 
 test("listTasks is empty before any task is created", () => {
-  const { engine } = buildEngine({ brainstorm: ok("brainstorm", "/wt/.grove/design.md") });
+  const { engine } = buildEngine(ok());
   expect(engine.listTasks()).toEqual([]);
 });

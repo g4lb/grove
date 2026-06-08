@@ -17,7 +17,7 @@ const OK = (stdout = ""): CommandResult => ({ code: 0, stdout, stderr: "" });
 
 test("create() makes a worktree on a grove/<id>-<slug> branch off HEAD", async () => {
   const paths = resolvePaths("/groveroot");
-  const runner = new ScriptedRunner((args) => OK());
+  const runner = new ScriptedRunner((args) => (args.includes("rev-parse") ? OK("basesha123") : OK()));
   const git = new GitRunner(runner, "/repo");
   const mgr = new GitWorktreeManager(git, paths);
 
@@ -25,12 +25,46 @@ test("create() makes a worktree on a grove/<id>-<slug> branch off HEAD", async (
 
   expect(result.branch).toBe("grove/1234abcd-add-oauth-login");
   expect(result.worktreePath).toBe("/groveroot/tasks/task_1234abcd/worktree");
+  expect(result.baseSha).toBe("basesha123");
 
   const addCall = runner.calls.find((a) => a.includes("worktree") && a.includes("add"))!;
   expect(addCall).toContain("-b");
   expect(addCall).toContain("grove/1234abcd-add-oauth-login");
   expect(addCall).toContain("/groveroot/tasks/task_1234abcd/worktree");
   expect(addCall[addCall.length - 1]).toBe("HEAD");
+
+  // The base SHA is captured BEFORE the worktree is created.
+  const revIdx = runner.calls.findIndex((a) => a.includes("rev-parse"));
+  const addIdx = runner.calls.findIndex((a) => a.includes("worktree") && a.includes("add"));
+  expect(revIdx).toBeGreaterThanOrEqual(0);
+  expect(revIdx).toBeLessThan(addIdx);
+});
+
+test("committedChanges() runs rev-list --count in the worktree dir", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner(() => OK("2"));
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+
+  expect(await mgr.committedChanges("/groveroot/tasks/task_1/worktree", "grove/task_1", "base000")).toBe(true);
+  const call = runner.calls.find((a) => a.includes("rev-list"))!;
+  expect(call).toEqual([
+    "-C",
+    "/repo",
+    "-C",
+    "/groveroot/tasks/task_1/worktree",
+    "rev-list",
+    "--count",
+    "base000..grove/task_1",
+  ]);
+});
+
+test("committedChanges() is false when the count is zero", async () => {
+  const paths = resolvePaths("/groveroot");
+  const runner = new ScriptedRunner(() => OK("0"));
+  const git = new GitRunner(runner, "/repo");
+  const mgr = new GitWorktreeManager(git, paths);
+  expect(await mgr.committedChanges("/wt", "grove/x", "base000")).toBe(false);
 });
 
 test("create() throws if git worktree add fails", async () => {

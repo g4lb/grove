@@ -14,7 +14,7 @@ export interface CreateTaskInput {
   kind: TaskKind;
   repoPath: string;
   status?: TaskStatus; // default "running"
-  currentPhase?: Phase; // default "brainstorm"
+  currentPhase?: Phase; // default "session"
 }
 
 export interface TaskPatch {
@@ -38,7 +38,6 @@ export interface CreatePhaseRunInput {
 export interface PhaseRunPatch {
   state?: PhaseState;
   summary?: string | null;
-  artifactPath?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
 }

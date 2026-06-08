@@ -1,15 +1,13 @@
 import { test, expect } from "bun:test";
-import React from "react";
 import { render } from "ink-testing-library";
 import { App } from "../../src/app/app.tsx";
 import type { ControllerView } from "../../src/app/controller.ts";
 import type { Task } from "../../src/domain/types.ts";
-import type { GateDecision } from "../../src/engine/task-engine.ts";
 
 function task(over: Partial<Task>): Task {
   return {
     id: "task_1", title: "x", description: null, kind: "task", status: "done",
-    currentPhase: "finish", repoPath: "/r", worktreePath: "/wt", branch: "b",
+    currentPhase: "session", repoPath: "/r", worktreePath: "/wt", branch: "b",
     composeProject: null, createdAt: "t", updatedAt: "t", ...over,
   };
 }
@@ -22,7 +20,6 @@ function spyController(view: ControllerView) {
     nav: [] as string[],
     snapshot() { return this.view; },
     async start() {},
-    async decide(_d: GateDecision) {},
     async submit(s: string) { this.submits.push(s); },
     selectUp() { this.nav.push("up"); },
     selectDown() { this.nav.push("down"); },
@@ -47,20 +44,19 @@ test("renders the list dashboard with task rows", () => {
   const c = spyController({
     ...idle,
     mode: "list",
-    tasks: [task({ id: "task_1", title: "build login", status: "waiting_confirm", currentPhase: "plan", kind: "task" })],
+    tasks: [task({ id: "task_1", title: "build login", status: "blocked", kind: "task" })],
     selected: 0,
   });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
   expect(frame).toContain("build login");
-  expect(frame).toContain("waiting_confirm");
-  expect(frame).toContain("plan");
+  expect(frame).toContain("blocked");
 });
 
 test("list-mode arrow keys move the selection", async () => {
   const c = spyController({ ...idle, mode: "list", tasks: [task({ id: "a" }), task({ id: "b" })], selected: 0 });
   const { stdin } = render(<App controller={c as any} />);
-  stdin.write("[B"); // down arrow
+  stdin.write("\x1B[B"); // down arrow
   await delay();
   expect(c.nav).toContain("down");
 });
@@ -76,13 +72,13 @@ test("list-mode 'o' opens the selected task", async () => {
 test("list-mode Esc returns to the prompt", async () => {
   const c = spyController({ ...idle, mode: "list", tasks: [task({ id: "a" })], selected: 0 });
   const { stdin } = render(<App controller={c as any} />);
-  stdin.write(""); // escape
+  stdin.write("\x1B"); // escape
   await delay();
   expect(c.nav).toContain("back");
 });
 
 test("pressing enter on a terminal state returns to the prompt (so /list is reachable again)", async () => {
-  const c = spyController({ ...idle, state: "done", message: "task complete", task: task({}) });
+  const c = spyController({ ...idle, state: "done", message: "done", task: task({}) });
   const { stdin } = render(<App controller={c as any} />);
   stdin.write("\r");
   await delay();
@@ -90,7 +86,7 @@ test("pressing enter on a terminal state returns to the prompt (so /list is reac
 });
 
 test("terminal-state hint mentions starting a new prompt and quitting", () => {
-  const c = spyController({ ...idle, state: "done", message: "task complete" });
+  const c = spyController({ ...idle, state: "done", message: "done" });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = (lastFrame() ?? "").toLowerCase();
   expect(frame).toContain("new prompt");

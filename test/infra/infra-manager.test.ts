@@ -5,8 +5,10 @@ import type { ComposeManager } from "../../src/infra/compose-manager.ts";
 
 class FakeWorktrees implements WorktreeManager {
   removed: string[] = [];
+  committedArgs: Array<{ worktreePath: string; branch: string; baseSha: string }> = [];
+  committed = true;
   async create(taskId: string, _title: string): Promise<Worktree> {
-    return { taskId, worktreePath: `/grove/tasks/${taskId}/worktree`, branch: `grove/${taskId}` };
+    return { taskId, worktreePath: `/grove/tasks/${taskId}/worktree`, branch: `grove/${taskId}`, baseSha: "base000" };
   }
   async remove(taskId: string): Promise<void> {
     this.removed.push(taskId);
@@ -16,6 +18,10 @@ class FakeWorktrees implements WorktreeManager {
   }
   async getDiff(_taskId: string): Promise<string> {
     return "";
+  }
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    this.committedArgs.push({ worktreePath, branch, baseSha });
+    return this.committed;
   }
 }
 
@@ -51,7 +57,16 @@ test("provision creates the worktree then brings up compose", async () => {
 
   expect(result.worktree.worktreePath).toBe("/grove/tasks/task_x/worktree");
   expect(result.composeStarted).toBe(true);
+  expect(result.worktree.baseSha).toBe("base000");
   expect(compose.ups[0]).toEqual({ taskId: "task_x", wt: "/grove/tasks/task_x/worktree" });
+});
+
+test("committedChanges delegates to the worktree manager", async () => {
+  const wts = new FakeWorktrees();
+  const infra = new InfraManager(wts, new FakeCompose(false));
+  wts.committed = false;
+  expect(await infra.committedChanges("/grove/tasks/task_x/worktree", "grove/task_x", "abc")).toBe(false);
+  expect(wts.committedArgs).toEqual([{ worktreePath: "/grove/tasks/task_x/worktree", branch: "grove/task_x", baseSha: "abc" }]);
 });
 
 test("provision reports composeStarted=false for a worktree-only task", async () => {

@@ -1,21 +1,17 @@
 import type { Store } from "../store/store.ts";
-import type { Task, TaskKind, Phase } from "../domain/types.ts";
+import type { Task, TaskKind } from "../domain/types.ts";
 import type { AgentRunner } from "../agent/agent-runner.ts";
-import type { AgentEvent, PhaseContext, PhaseResult } from "../agent/events.ts";
+import type { AgentEvent, SessionContext, SessionResult } from "../agent/events.ts";
 import type { TaskInfra } from "./task-infra.ts";
-import { PHASES, isGateAfter, isTerminalPhase, nextPhase } from "./phase-sequence.ts";
 
 export interface StartTaskInput {
   title: string;
   description?: string;
   repoPath: string;
   kind: TaskKind;
+  /** Absolute path to the resolved superpowers plugin directory. */
+  superpowersPath: string;
 }
-
-export type GateDecision =
-  | { kind: "approve" }
-  | { kind: "rerun"; feedback?: string }
-  | { kind: "stop" };
 
 export interface TaskEngineDeps {
   store: Store;
@@ -77,7 +73,7 @@ export class TaskEngine {
       try {
         h(event);
       } catch {
-        // A buggy subscriber must not abort the phase or corrupt task state.
+        // A buggy subscriber must not abort the session or corrupt task state.
       }
     }
   }
@@ -97,121 +93,127 @@ export class TaskEngine {
     });
     const off = onEvent ? this.subscribe(task.id, onEvent) : () => {};
     try {
-      const result = await this.infra.provision(task.id, input.title);
+      let result;
+      try {
+        result = await this.infra.provision(task.id, input.title);
+      } catch (err) {
+        // A provision failure (e.g. `git worktree add`) must NOT leave the task stuck at the
+        // default "running" status (an unrecoverable zombie) or escape as an unhandled
+        // rejection. Mark it blocked — preserving the persist-before-return invariant.
+        this.store.appendEvent({
+          taskId: task.id,
+          type: "error",
+          payload: { message: `provision failed: ${err instanceof Error ? err.message : String(err)}` },
+        });
+        this.store.updateTask(task.id, { status: "blocked", currentPhase: "session" });
+        return this.requireTask(task.id);
+      }
       this.store.updateTask(task.id, {
         worktreePath: result.worktree.worktreePath,
         branch: result.worktree.branch,
         composeProject: result.composeStarted ? `grove-${task.id}` : null,
       });
       this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
-      return await this.runFrom(task.id, "brainstorm");
+      return await this.runSession(task.id, input.superpowersPath, input.description ?? input.title, result.worktree.baseSha);
     } finally {
       off();
     }
   }
 
-  async confirmGate(taskId: string, decision: GateDecision, onEvent?: OnEvent): Promise<Task> {
-    const task = this.requireTask(taskId);
-
-    if (task.status === "done") {
-      throw new Error(`cannot ${decision.kind} a completed task ${taskId}`);
-    }
-
-    if (decision.kind === "stop") {
-      return this.store.updateTask(taskId, { status: "stopped" });
-    }
-
-    const off = onEvent ? this.subscribe(taskId, onEvent) : () => {};
-    try {
-      if (decision.kind === "rerun") {
-        // Re-run the current phase ("request changes" with feedback, or "retry" without).
-        return await this.runFrom(taskId, task.currentPhase, decision.feedback);
-      }
-
-      // approve
-      if (task.status !== "waiting_confirm") {
-        throw new Error(`cannot approve task ${taskId} in status ${task.status}`);
-      }
-      const next = nextPhase(task.currentPhase);
-      if (!next) throw new Error(`no phase after ${task.currentPhase}`);
-      return await this.runFrom(taskId, next);
-    } finally {
-      off();
-    }
-  }
-
-  /** Resume a crashed-`running`, `blocked`, or `stopped` task by re-running its current phase forward. */
-  async resume(taskId: string): Promise<Task> {
-    const task = this.requireTask(taskId);
-    if (task.status === "waiting_confirm" || task.status === "done") return task;
-    return this.runFrom(taskId, task.currentPhase);
-  }
-
-  /** Run phases from `start` forward, persisting, until a gate / terminal / failure. */
-  protected async runFrom(
+  /**
+   * Run one autonomous agent session, persisting before returning.
+   *
+   * `baseSha` is the repo SHA the worktree branched from at provision time: a "successful"
+   * session is only reported `done` if it actually committed work onto the branch (the SDK
+   * reports success when the conversation ends normally, even with an empty branch).
+   */
+  protected async runSession(
     taskId: string,
-    start: Phase,
-    feedback?: string,
+    superpowersPath: string,
+    prose: string,
+    baseSha: string,
   ): Promise<Task> {
-    let phase: Phase | null = start;
-    let firstPhase = true;
-    while (phase) {
-      const task = this.requireTask(taskId);
-      this.store.updateTask(taskId, { status: "running", currentPhase: phase });
-      const run = this.store.createPhaseRun({ taskId, phase, state: "running" });
-      this.store.updatePhaseRun(run.id, { startedAt: this.now() });
+    const task = this.requireTask(taskId);
+    this.store.updateTask(taskId, { status: "running", currentPhase: "session" });
+    const run = this.store.createPhaseRun({ taskId, phase: "session", state: "running" });
+    this.store.updatePhaseRun(run.id, { startedAt: this.now() });
 
-      const ctx = this.buildContext(task, phase, firstPhase ? feedback : undefined);
-      let result: PhaseResult;
+    const ctx: SessionContext = {
+      taskId: task.id,
+      title: task.title,
+      prose,
+      worktreePath: task.worktreePath ?? "",
+      branch: task.branch ?? "",
+      model: this.model,
+      superpowersPath,
+    };
+
+    let result: SessionResult;
+    try {
+      result = await this.runAgent(taskId, ctx);
+    } catch (err) {
+      // A thrown agent error (vs a success:false return) must not escape and leave the
+      // phase_run/task stuck in "running" — mark it failed + blocked, preserving the
+      // persist-before-return invariant.
+      this.store.updatePhaseRun(run.id, {
+        state: "failed",
+        summary: `session crashed: ${err instanceof Error ? err.message : String(err)}`,
+        endedAt: this.now(),
+      });
+      this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
+      return this.requireTask(taskId);
+    }
+
+    this.store.updatePhaseRun(run.id, {
+      state: result.success ? "succeeded" : "failed",
+      summary: result.summary,
+      endedAt: this.now(),
+    });
+
+    if (!result.success) {
+      this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
+      return this.requireTask(taskId);
+    }
+
+    // The SDK reports success when the conversation ends normally — even if the agent
+    // committed nothing. Reporting "done — branch ready" then would mislead. Gate `done` on
+    // the worktree branch having commits ahead of the base it branched from; otherwise leave
+    // the worktree in place (no teardown) for inspection and mark the task blocked.
+    const gated = this.requireTask(taskId);
+    if (gated.worktreePath && gated.branch) {
+      let committed = false;
+      let summary = "session finished but committed no changes";
       try {
-        result = await this.runPhase(taskId, phase, ctx, run.id);
+        committed = await this.infra.committedChanges(gated.worktreePath, gated.branch, baseSha);
       } catch (err) {
-        // A thrown agent error (vs a success:false return) must not escape and leave the
-        // phase_run/task stuck in "running" — mark it failed + blocked, preserving the
-        // persist-before-return invariant.
-        this.store.updatePhaseRun(run.id, {
-          state: "failed",
-          summary: `phase ${phase} crashed: ${err instanceof Error ? err.message : String(err)}`,
-          endedAt: this.now(),
-        });
-        this.store.updateTask(taskId, { status: "blocked", currentPhase: phase });
+        // A git failure verifying commits must NOT escape and leave the task stuck "running"
+        // (the persist-before-return invariant). Treat an unverifiable result as not-done.
+        summary = `session finished but its result could not be verified: ${err instanceof Error ? err.message : String(err)}`;
+      }
+      if (!committed) {
+        this.store.updatePhaseRun(run.id, { state: "failed", summary, endedAt: this.now() });
+        this.store.updateTask(taskId, { status: "blocked", currentPhase: "session" });
         return this.requireTask(taskId);
       }
+    }
 
-      if (!result.success) {
-        this.store.updateTask(taskId, { status: "blocked", currentPhase: phase });
-        return this.requireTask(taskId);
+    // Mark done first — the work is committed on the branch, so a teardown failure must
+    // not leave the task stuck in "running". Teardown is best-effort; `grove gc` reclaims
+    // anything left behind.
+    const t = this.requireTask(taskId);
+    this.store.updateTask(taskId, { status: "done", currentPhase: "session" });
+    if (t.worktreePath) {
+      try {
+        await this.infra.teardown(taskId, t.worktreePath);
+      } catch {
+        // best-effort
       }
-
-      if (isTerminalPhase(phase)) {
-        const t = this.requireTask(taskId);
-        // Mark done first — the work is integrated, so a teardown failure must not leave
-        // the task stuck in "running". Teardown is best-effort cleanup; `grove gc` reclaims
-        // anything left behind.
-        this.store.updateTask(taskId, { status: "done", currentPhase: phase });
-        if (t.worktreePath) {
-          try {
-            await this.infra.teardown(taskId, t.worktreePath);
-          } catch {
-            // best-effort
-          }
-        }
-        return this.requireTask(taskId);
-      }
-
-      if (isGateAfter(phase)) {
-        this.store.updateTask(taskId, { status: "waiting_confirm", currentPhase: phase });
-        return this.requireTask(taskId);
-      }
-
-      phase = nextPhase(phase);
-      firstPhase = false;
     }
     return this.requireTask(taskId);
   }
 
-  private async runPhase(taskId: string, phase: Phase, ctx: PhaseContext, runId: string): Promise<PhaseResult> {
-    const gen = this.agent.run(phase, ctx);
+  private async runAgent(taskId: string, ctx: SessionContext): Promise<SessionResult> {
+    const gen = this.agent.run(ctx);
     let next = await gen.next();
     while (!next.done) {
       const event = next.value;
@@ -219,44 +221,6 @@ export class TaskEngine {
       this.emit(taskId, event);
       next = await gen.next();
     }
-    const result = next.value;
-    this.store.updatePhaseRun(runId, {
-      state: result.success ? "succeeded" : "failed",
-      summary: result.summary,
-      artifactPath: result.artifactPath,
-      endedAt: this.now(),
-    });
-    return result;
-  }
-
-  private buildContext(task: Task, phase: Phase, feedback: string | undefined): PhaseContext {
-    return {
-      taskId: task.id,
-      title: task.title,
-      description: task.description ?? undefined,
-      worktreePath: task.worktreePath ?? "",
-      model: this.model,
-      priorArtifacts: this.priorArtifacts(task.id, phase),
-      feedback,
-    };
-  }
-
-  /** Artifacts of earlier succeeded phases (reconstructed from the store, so resume works). */
-  private priorArtifacts(taskId: string, phase: Phase): Array<{ phase: Phase; path: string }> {
-    const idx = PHASES.indexOf(phase);
-    // Keep only the latest succeeded run per phase — a rerun/resume creates extra
-    // phase_run rows for the same phase. getPhaseRuns is rowid-ordered, so last write wins.
-    const latest = new Map<Phase, string>();
-    for (const r of this.store.getPhaseRuns(taskId)) {
-      if (r.state === "succeeded" && r.artifactPath && PHASES.indexOf(r.phase) < idx) {
-        latest.set(r.phase, r.artifactPath);
-      }
-    }
-    const out: Array<{ phase: Phase; path: string }> = [];
-    for (const p of PHASES) {
-      const path = latest.get(p);
-      if (path !== undefined) out.push({ phase: p, path });
-    }
-    return out;
+    return next.value;
   }
 }

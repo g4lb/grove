@@ -24,4 +24,9 @@ export class InfraManager {
     await this.compose.down(taskId, worktreePath);
     await this.worktrees.remove(taskId);
   }
+
+  /** True if the session committed at least one change onto the worktree branch. */
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    return this.worktrees.committedChanges(worktreePath, branch, baseSha);
+  }
 }

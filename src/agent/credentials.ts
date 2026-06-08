@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 
-export type CredentialKind = "api_key" | "oauth_token" | "claude_code_login" | "none";
+type CredentialKind = "api_key" | "oauth_token" | "claude_code_login" | "none";
 
 export interface CredentialInfo {
   present: boolean;
@@ -26,11 +26,41 @@ export function hasCredentials(env: Env): boolean {
   return detectCredentials(env).present;
 }
 
-/** The credential-only env to hand to the SDK subprocess (no unrelated vars leaked). */
+/**
+ * The Anthropic credential vars to OVERLAY onto the subprocess env (it does NOT scope the base
+ * env — it just guarantees the credential vars are present). Overlay this on top of
+ * `scopedAgentEnv(env)` so the subprocess keeps PATH/HOME/project vars but not unrelated secrets.
+ */
 export function credentialEnv(env: Env): Env {
   const out: Env = {};
   if (env.ANTHROPIC_API_KEY) out.ANTHROPIC_API_KEY = env.ANTHROPIC_API_KEY;
   if (env.CLAUDE_CODE_OAUTH_TOKEN) out.CLAUDE_CODE_OAUTH_TOKEN = env.CLAUDE_CODE_OAUTH_TOKEN;
+  return out;
+}
+
+// Names matching this look like cloud/CI/service secrets the agent's dev work never needs, so we
+// don't hand them to the third-party superpowers plugin running with bypassPermissions. The SDK's
+// `env` option REPLACES the subprocess environment (it is not merged with process.env), so this
+// scoping is effective. Anthropic/Claude creds are exempted below.
+//
+// NOTE — best-effort, not a security boundary: the agent runs with bypassPermissions on the host,
+// so it can already read secret FILES (~/.aws, .env, …) regardless of env, and a denylist can't be
+// exhaustive without dropping vars a legitimate task needs (DB URLs, service keys its tests use).
+// True isolation requires sandboxing the agent — a deferred follow-up (the SDK has a `sandbox` option).
+const SENSITIVE_ENV_KEY = /(SECRET|PASSWORD|PASSWD|CREDENTIALS|PRIVATE_KEY|_ACCESS_KEY|_TOKEN|^AWS_|GITHUB_TOKEN|GH_TOKEN|NPM_TOKEN|^GCP_|^GOOGLE_|^AZURE_|^DIGITALOCEAN_|^CLOUDFLARE_)/i;
+
+/**
+ * The base env for the agent subprocess with unrelated cloud/CI secrets removed, while keeping
+ * dev/project env (PATH, HOME, project URLs, …) working. Anthropic/Claude credential vars are
+ * always kept so the agent can authenticate.
+ */
+export function scopedAgentEnv(env: Env): Env {
+  const out: Env = {};
+  for (const [key, value] of Object.entries(env)) {
+    const isAnthropic = key.startsWith("ANTHROPIC_") || key.startsWith("CLAUDE_");
+    if (!isAnthropic && SENSITIVE_ENV_KEY.test(key)) continue;
+    out[key] = value;
+  }
   return out;
 }
 

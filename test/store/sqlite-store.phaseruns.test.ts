@@ -8,10 +8,10 @@ function makeStore() {
 test("createPhaseRun defaults state to pending and round-trips", () => {
   const store = makeStore();
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/r" });
-  const run = store.createPhaseRun({ taskId: task.id, phase: "brainstorm" });
+  const run = store.createPhaseRun({ taskId: task.id, phase: "session" });
   expect(run.id.startsWith("run_")).toBe(true);
   expect(run.taskId).toBe(task.id);
-  expect(run.phase).toBe("brainstorm");
+  expect(run.phase).toBe("session");
   expect(run.state).toBe("pending");
   expect(run.summary).toBeNull();
   store.close();
@@ -20,16 +20,14 @@ test("createPhaseRun defaults state to pending and round-trips", () => {
 test("updatePhaseRun applies a patch", () => {
   const store = makeStore();
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/r" });
-  const run = store.createPhaseRun({ taskId: task.id, phase: "brainstorm" });
+  const run = store.createPhaseRun({ taskId: task.id, phase: "session" });
   const updated = store.updatePhaseRun(run.id, {
     state: "succeeded",
     summary: "design done",
-    artifactPath: "/r/design.md",
     endedAt: "2026-06-06T01:00:00.000Z",
   });
   expect(updated.state).toBe("succeeded");
   expect(updated.summary).toBe("design done");
-  expect(updated.artifactPath).toBe("/r/design.md");
   expect(updated.endedAt).toBe("2026-06-06T01:00:00.000Z");
   store.close();
 });
@@ -43,11 +41,11 @@ test("updatePhaseRun throws for unknown id", () => {
 test("getPhaseRuns returns runs for a task in creation order", () => {
   const store = makeStore();
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/r" });
-  store.createPhaseRun({ taskId: task.id, phase: "brainstorm" });
-  store.createPhaseRun({ taskId: task.id, phase: "plan" });
+  const r0 = store.createPhaseRun({ taskId: task.id, phase: "session" });
+  const r1 = store.createPhaseRun({ taskId: task.id, phase: "session" });
   const runs = store.getPhaseRuns(task.id);
   expect(runs.length).toBe(2);
-  expect(runs[0]!.phase).toBe("brainstorm");
-  expect(runs[1]!.phase).toBe("plan");
+  expect(runs[0]!.id).toBe(r0.id);
+  expect(runs[1]!.id).toBe(r1.id);
   store.close();
 });

@@ -1,56 +1,50 @@
 import { SqliteStore } from "../../src/store/sqlite-store.ts";
-import { FakeAgentRunner, type PhaseScript } from "../../src/agent/fake-agent-runner.ts";
+import { FakeAgentRunner, type FakeSession, ok, fail } from "../../src/agent/fake-agent-runner.ts";
 import { TaskEngine } from "../../src/engine/task-engine.ts";
 import type { TaskInfra, TaskProvisionResult } from "../../src/engine/task-infra.ts";
-import type { Phase } from "../../src/domain/types.ts";
-import type { AgentEvent, PhaseResult } from "../../src/agent/events.ts";
+
+export { ok, fail };
+
+export const SUPERPOWERS_PATH = "/sp";
 
 export class FakeTaskInfra implements TaskInfra {
   provisioned: string[] = [];
   toreDown: Array<{ taskId: string; worktreePath: string }> = [];
+  /** Override to simulate a session that committed nothing. */
+  committed = true;
   constructor(private composeStarted = false) {}
   async provision(taskId: string, _title: string): Promise<TaskProvisionResult> {
     this.provisioned.push(taskId);
     return {
-      worktree: { taskId, worktreePath: "/wt", branch: `grove/${taskId}` },
+      worktree: { taskId, worktreePath: "/wt", branch: `grove/${taskId}`, baseSha: "base000" },
       composeStarted: this.composeStarted,
     };
   }
   async teardown(taskId: string, worktreePath: string): Promise<void> {
     this.toreDown.push({ taskId, worktreePath });
   }
+  async committedChanges(_worktreePath: string, _branch: string, _baseSha: string): Promise<boolean> {
+    return this.committed;
+  }
 }
 
-/** A successful phase script (optionally with events + an artifact path). */
-export function ok(phase: Phase, artifactPath: string | null = null, events: AgentEvent[] = []): PhaseScript {
-  const result: PhaseResult = {
-    success: true,
-    summary: `${phase} done`,
-    artifactPath,
-    costUsd: 0,
-    sessionId: "s",
+/** A StartTaskInput with the superpowers path filled in. */
+export function startInput(over: { title?: string; description?: string; repoPath?: string } = {}) {
+  return {
+    title: over.title ?? "x",
+    description: over.description,
+    repoPath: over.repoPath ?? "/r",
+    kind: "task" as const,
+    superpowersPath: SUPERPOWERS_PATH,
   };
-  return { events, result };
-}
-
-/** A failed phase script. */
-export function fail(phase: Phase): PhaseScript {
-  const result: PhaseResult = {
-    success: false,
-    summary: `${phase} failed`,
-    artifactPath: null,
-    costUsd: 0,
-    sessionId: "s",
-  };
-  return { events: [], result };
 }
 
 export function buildEngine(
-  scripts: Partial<Record<Phase, PhaseScript>>,
+  session: FakeSession,
   opts: { infra?: FakeTaskInfra } = {},
 ) {
   const store = SqliteStore.open(":memory:", { now: () => "2026-06-06T00:00:00.000Z" });
-  const agent = new FakeAgentRunner(scripts);
+  const agent = new FakeAgentRunner(session);
   const infra = opts.infra ?? new FakeTaskInfra();
   const engine = new TaskEngine({ store, agent, infra, model: "claude-opus-4-8", now: () => "2026-06-06T00:00:00.000Z" });
   return { store, agent, infra, engine };

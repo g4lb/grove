@@ -1,25 +1,25 @@
-import type { Phase } from "../domain/types.ts";
 import type { AgentRunner } from "./agent-runner.ts";
-import type { AgentEvent, PhaseContext, PhaseResult } from "./events.ts";
+import type { AgentEvent, SessionContext, SessionResult } from "./events.ts";
 
-export interface PhaseScript {
-  events: AgentEvent[];
-  result: PhaseResult;
+export interface FakeSession {
+  events?: AgentEvent[];
+  result: SessionResult;
 }
 
-/** Deterministic AgentRunner driven by a per-phase script. For tests and the engine. */
+/** A single-session fake: records contexts, yields scripted events, returns a scripted result. */
 export class FakeAgentRunner implements AgentRunner {
-  calls: Array<{ phase: Phase; taskId: string }> = [];
-
-  constructor(private scripts: Partial<Record<Phase, PhaseScript>>) {}
-
-  async *run(phase: Phase, context: PhaseContext): AsyncGenerator<AgentEvent, PhaseResult> {
-    this.calls.push({ phase, taskId: context.taskId });
-    const script = this.scripts[phase];
-    if (!script) throw new Error(`no script for phase: ${phase}`);
-    for (const event of script.events) {
-      yield event;
-    }
-    return script.result;
+  contexts: SessionContext[] = [];
+  constructor(private session: FakeSession) {}
+  async *run(ctx: SessionContext): AsyncGenerator<AgentEvent, SessionResult> {
+    this.contexts.push(ctx);
+    for (const e of this.session.events ?? []) yield e;
+    return this.session.result;
   }
+}
+
+export function ok(summary = "done", events: AgentEvent[] = []): FakeSession {
+  return { events, result: { success: true, summary, costUsd: 0, sessionId: "s" } };
+}
+export function fail(summary = "failed", events: AgentEvent[] = []): FakeSession {
+  return { events, result: { success: false, summary, costUsd: 0, sessionId: "s" } };
 }

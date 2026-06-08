@@ -8,6 +8,8 @@ export interface Worktree {
   taskId: string;
   worktreePath: string;
   branch: string;
+  /** The repo HEAD SHA this worktree branched from (`HEAD` at `git worktree add` time). */
+  baseSha: string;
 }
 
 export interface WorktreeManager {
@@ -15,6 +17,8 @@ export interface WorktreeManager {
   remove(taskId: string): Promise<void>;
   list(): Promise<string[]>;
   getDiff(taskId: string): Promise<string>;
+  /** True if `<branch>` has commits ahead of the base SHA it branched from. */
+  committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean>;
 }
 
 /** Short suffix of a `task_<hex>` id, used in the human-facing branch name. */
@@ -40,8 +44,12 @@ export class GitWorktreeManager implements WorktreeManager {
   async create(taskId: string, title: string): Promise<Worktree> {
     const branch = `grove/${shortId(taskId)}-${slugify(title)}`;
     const worktreePath = this.worktreePathFor(taskId);
+    // Capture the SHA the worktree will branch from BEFORE creating it, so the engine can
+    // later tell whether the autonomous session actually committed anything (HEAD here is
+    // the same revision `git worktree add … HEAD` checks out into the new branch).
+    const baseSha = await this.git.revParseHead();
     await this.git.git(["worktree", "add", "-b", branch, worktreePath, "HEAD"]);
-    return { taskId, worktreePath, branch };
+    return { taskId, worktreePath, branch, baseSha };
   }
 
   async remove(taskId: string): Promise<void> {
@@ -68,6 +76,10 @@ export class GitWorktreeManager implements WorktreeManager {
       .split("\n")
       .filter((line) => line.startsWith("worktree "))
       .map((line) => line.slice("worktree ".length));
+  }
+
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    return this.git.committedChanges(worktreePath, branch, baseSha);
   }
 
   async getDiff(taskId: string): Promise<string> {

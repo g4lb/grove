@@ -5,7 +5,7 @@ import type { TaskRunController } from "./controller.ts";
 export interface AppProps {
   controller: Pick<
     TaskRunController,
-    "snapshot" | "start" | "decide" | "submit" | "selectUp" | "selectDown" | "openSelected" | "backToPrompt"
+    "snapshot" | "start" | "submit" | "selectUp" | "selectDown" | "openSelected" | "backToPrompt"
   > & { onChange: () => void };
 }
 
@@ -13,7 +13,6 @@ export function App({ controller }: AppProps): React.ReactElement {
   const { exit } = useApp();
   const [, forceRender] = useReducer((n: number) => n + 1, 0);
   const [input, setInput] = useState("");
-  const [feedbackMode, setFeedbackMode] = useState(false);
 
   // Ref mirror of the input so synchronous key bursts (e.g. text then Enter)
   // always read the latest value, not the value captured at render time.
@@ -62,25 +61,6 @@ export function App({ controller }: AppProps): React.ReactElement {
       } else if (char && !key.ctrl && !key.meta) {
         updateInput(inputRef.current + char);
       }
-    } else if (view.state === "waiting_confirm") {
-      if (feedbackMode) {
-        if (key.return) {
-          const fb = inputRef.current.trim();
-          updateInput("");
-          setFeedbackMode(false);
-          void controller.decide({ kind: "rerun", feedback: fb.length > 0 ? fb : undefined });
-        } else if (key.backspace || key.delete) {
-          updateInput(inputRef.current.slice(0, -1));
-        } else if (char && !key.ctrl && !key.meta) {
-          updateInput(inputRef.current + char);
-        }
-      } else if (char === "a") {
-        void controller.decide({ kind: "approve" });
-      } else if (char === "s") {
-        void controller.decide({ kind: "stop" });
-      } else if (char === "r") {
-        setFeedbackMode(true);
-      }
     }
   });
 
@@ -92,7 +72,7 @@ export function App({ controller }: AppProps): React.ReactElement {
         {view.tasks.map((t, i) => (
           <Text key={t.id} color={i === view.selected ? "cyan" : undefined}>
             {i === view.selected ? "› " : "  "}
-            {t.status.padEnd(15)} {t.kind.padEnd(6)} {t.currentPhase.padEnd(10)} {t.title}
+            {t.status.padEnd(10)} {t.kind.padEnd(6)} {t.title}
           </Text>
         ))}
         <Text dimColor>↑/↓ select · enter/o open · esc back</Text>
@@ -114,16 +94,11 @@ export function App({ controller }: AppProps): React.ReactElement {
 
       {view.message.length > 0 && <Text>{view.message}</Text>}
 
-      {terminal && <Text dimColor>enter: new prompt · q: quit</Text>}
-
       {view.state === "running" && <Text dimColor>working…</Text>}
 
-      {view.viewing && <Text dimColor>esc: back</Text>}
+      {terminal && <Text dimColor>enter: new prompt · q: quit</Text>}
 
-      {view.state === "waiting_confirm" && !feedbackMode && (
-        <Text color="cyan">(a) approve / (r) request changes / (s) stop</Text>
-      )}
-      {view.state === "waiting_confirm" && feedbackMode && <Text>{"changes: "}{input}</Text>}
+      {view.viewing && <Text dimColor>esc: back</Text>}
     </Box>
   );
 }

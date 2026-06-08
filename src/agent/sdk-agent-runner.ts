@@ -1,11 +1,8 @@
-import { join } from "node:path";
-import { existsSync } from "node:fs";
 import { query as realQuery } from "@anthropic-ai/claude-agent-sdk";
-import type { Phase } from "../domain/types.ts";
 import type { AgentRunner } from "./agent-runner.ts";
-import type { AgentEvent, PhaseContext, PhaseResult } from "./events.ts";
-import { phaseDefinition, buildPrompt } from "./phases.ts";
-import { credentialEnv } from "./credentials.ts";
+import type { AgentEvent, SessionContext, SessionResult } from "./events.ts";
+import { buildSessionPrompt, AUTONOMY_APPEND } from "./session-prompt.ts";
+import { credentialEnv, scopedAgentEnv } from "./credentials.ts";
 
 /** The shape of the SDK's query() that we depend on (injected for testability). */
 export type QueryFn = typeof realQuery;
@@ -30,10 +27,7 @@ export class SdkAgentRunner implements AgentRunner {
     this.claudePath = opts.claudePath ?? null;
   }
 
-  async *run(phase: Phase, ctx: PhaseContext): AsyncGenerator<AgentEvent, PhaseResult> {
-    const def = phaseDefinition(phase);
-    const artifactPath = def.artifactRelPath ? join(ctx.worktreePath, def.artifactRelPath) : null;
-
+  async *run(ctx: SessionContext): AsyncGenerator<AgentEvent, SessionResult> {
     let sessionId: string | null = null;
     let summary = "";
     let costUsd = 0;
@@ -41,66 +35,52 @@ export class SdkAgentRunner implements AgentRunner {
 
     try {
       const stream = this.queryFn({
-        prompt: buildPrompt(phase, ctx),
+        prompt: buildSessionPrompt(ctx),
         options: {
-          systemPrompt: { type: "preset", preset: "claude_code", append: def.systemPromptAppend },
+          systemPrompt: { type: "preset", preset: "claude_code", append: AUTONOMY_APPEND },
           cwd: ctx.worktreePath,
           model: ctx.model,
-          maxTurns: def.maxTurns,
+          maxTurns: 200,
           permissionMode: "bypassPermissions",
           includePartialMessages: true,
+          plugins: [{ type: "local", path: ctx.superpowersPath }],
           ...(this.claudePath ? { pathToClaudeCodeExecutable: this.claudePath } : {}),
-          // Full base env (so the subprocess inherits PATH/HOME and can launch the
-          // native binary) with the credential vars overlaid to guarantee presence.
-          env: { ...this.env, ...credentialEnv(this.env) },
+          // Base env scoped to drop unrelated cloud/CI secrets (the superpowers plugin runs
+          // with bypassPermissions) while keeping PATH/HOME/project vars so the subprocess can
+          // launch the native binary, with the Anthropic credential vars overlaid to guarantee
+          // presence.
+          env: { ...scopedAgentEnv(this.env), ...credentialEnv(this.env) },
         },
       } as Parameters<QueryFn>[0]);
 
       for await (const m of stream as AsyncIterable<any>) {
         if (m.type === "system" && m.subtype === "init") {
           sessionId = m.session_id ?? null;
-          yield { type: "notice", message: `phase ${phase} started` };
+          yield { type: "notice", message: "session started" };
         } else if (m.type === "stream_event") {
           const ev = m.event;
           if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta") {
             yield { type: "token", text: ev.delta.text };
-          }
-        } else if (m.type === "assistant") {
-          for (const block of m.message?.content ?? []) {
-            if (block.type === "tool_use") {
-              yield { type: "tool_use", tool: block.name, input: block.input };
-            }
+          } else if (ev?.type === "content_block_start" && ev.content_block?.type === "tool_use") {
+            yield { type: "tool_use", tool: ev.content_block.name, input: ev.content_block.input ?? {} };
           }
         } else if (m.type === "result") {
+          success = m.subtype === "success";
+          summary = m.result ?? m.subtype ?? "";
           costUsd = m.total_cost_usd ?? 0;
-          if (m.subtype === "success") {
-            success = true;
-            summary = m.result ?? "";
-          } else {
-            success = false;
-            summary = `phase ${phase} did not complete: ${m.subtype}`;
-          }
         }
       }
     } catch (err) {
       // A thrown query()/stream error (auth failure, network drop, subprocess spawn
-      // failure) becomes a failed phase rather than escaping as an unhandled rejection.
+      // failure) becomes a failed session rather than escaping as an unhandled rejection.
       return {
         success: false,
-        summary: `phase ${phase} crashed: ${err instanceof Error ? err.message : String(err)}`,
-        artifactPath,
+        summary: `session error: ${err instanceof Error ? err.message : String(err)}`,
         costUsd,
         sessionId,
       };
     }
 
-    // An SDK "success" only means the agent finished its turn — verify the declared
-    // gate artifact was actually written, so success:true is a real guarantee.
-    if (success && artifactPath && !existsSync(artifactPath)) {
-      success = false;
-      summary = `phase ${phase} reported success but did not produce its gate artifact (${artifactPath})`;
-    }
-
-    return { success, summary, artifactPath, costUsd, sessionId };
+    return { success, summary, costUsd, sessionId };
   }
 }

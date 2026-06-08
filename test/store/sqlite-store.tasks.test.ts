@@ -12,7 +12,7 @@ test("createTask applies defaults and round-trips", () => {
   expect(task.title).toBe("add login");
   expect(task.kind).toBe("task");
   expect(task.status).toBe("running");
-  expect(task.currentPhase).toBe("brainstorm");
+  expect(task.currentPhase).toBe("session");
   expect(task.repoPath).toBe("/repo");
   expect(task.worktreePath).toBeNull();
   expect(task.createdAt).toBe("2026-06-06T00:00:00.000Z");
@@ -31,15 +31,15 @@ test("updateTask applies a patch and bumps updatedAt", () => {
   const store = makeStore(() => `2026-06-06T00:00:0${t++}.000Z`);
   const task = store.createTask({ title: "x", kind: "task", repoPath: "/repo" });
   const updated = store.updateTask(task.id, {
-    status: "waiting_confirm",
+    status: "blocked",
     worktreePath: "/repo/.grove/wt",
     branch: "grove/abc",
   });
-  expect(updated.status).toBe("waiting_confirm");
+  expect(updated.status).toBe("blocked");
   expect(updated.worktreePath).toBe("/repo/.grove/wt");
   expect(updated.branch).toBe("grove/abc");
   expect(updated.updatedAt).not.toBe(task.updatedAt);
-  expect(store.getTask(task.id)?.status).toBe("waiting_confirm");
+  expect(store.getTask(task.id)?.status).toBe("blocked");
   store.close();
 });
 
@@ -53,7 +53,7 @@ test("queryTasks returns all, newest first, and filters by status", () => {
   let t = 0;
   const store = makeStore(() => `2026-06-06T00:00:0${t++}.000Z`);
   const a = store.createTask({ title: "a", kind: "task", repoPath: "/r" });
-  const b = store.createTask({ title: "b", kind: "task", repoPath: "/r" });
+  store.createTask({ title: "b", kind: "task", repoPath: "/r" });
   store.updateTask(a.id, { status: "done" });
   const all = store.queryTasks();
   expect(all.length).toBe(2);

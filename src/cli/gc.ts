@@ -17,7 +17,7 @@ const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["done", "stopped"
 /**
  * Given candidate task ids discovered on disk / as compose projects, return the ids
  * that are safe to reclaim: those absent from the store, or in a terminal state.
- * Never reclaims running / waiting_confirm / blocked tasks.
+ * Never reclaims running / blocked tasks.
  */
 export function findOrphans(candidateIds: string[], lookup: TaskStatusLookup): string[] {
   const seen = new Set<string>();
@@ -83,7 +83,7 @@ export async function runGc(deps: GcDeps): Promise<GcReport> {
  * Enumerate candidate task ids from on-disk worktree dirs and grove- compose projects.
  * Used to build the real GcDeps; kept separate so runGc stays unit-testable.
  */
-export async function discoverTaskIds(paths: GrovePaths, docker: DockerRunner): Promise<string[]> {
+async function discoverTaskIds(paths: GrovePaths, docker: DockerRunner): Promise<string[]> {
   const ids = new Set<string>();
 
   if (existsSync(paths.tasksDir)) {

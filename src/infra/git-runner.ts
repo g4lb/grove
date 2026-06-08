@@ -15,6 +15,20 @@ export class GitRunner {
     return res.stdout.trim();
   }
 
+  /** The current repo HEAD SHA (full). */
+  async revParseHead(): Promise<string> {
+    return this.git(["rev-parse", "HEAD"]);
+  }
+
+  /** True if `<branch>` has at least one commit ahead of `baseSha` (computed in the worktree). */
+  async committedChanges(worktreePath: string, branch: string, baseSha: string): Promise<boolean> {
+    // GitRunner injects `-C <repoPath>`; the second absolute `-C <worktreePath>` overrides it so
+    // the count is computed in the task's worktree. Count against the task branch (not HEAD) so
+    // an agent that wandered onto a different branch can't make an empty `grove/<id>` look done.
+    const out = await this.git(["-C", worktreePath, "rev-list", "--count", `${baseSha}..${branch}`]);
+    return Number(out) > 0;
+  }
+
   /** True if repoPath is inside a git work tree. */
   async isGitRepo(): Promise<boolean> {
     const res = await this.runner.run("git", [
