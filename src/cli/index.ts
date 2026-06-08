@@ -31,7 +31,7 @@ import { render } from "ink";
 import { App } from "../app/app.tsx";
 import { TaskRunController } from "../app/controller.ts";
 
-const VERSION = "0.1.2";
+const VERSION = "0.2.0";
 
 function printUsage(): void {
   console.log('grove — usage: grove [run "<prose>" | init | gc [--yes] | doctor | install-runtime | --version]');
