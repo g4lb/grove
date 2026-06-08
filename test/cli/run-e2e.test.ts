@@ -15,10 +15,11 @@ import { ShellDiskMonitor } from "../../src/infra/disk-monitor.ts";
 import { SdkAgentRunner } from "../../src/agent/sdk-agent-runner.ts";
 import { resolveClaudePath } from "../../src/agent/claude-binary.ts";
 import { resolveSuperpowers } from "../../src/agent/superpowers.ts";
-import { hasCredentials } from "../../src/agent/credentials.ts";
+import { detectUsableCredential } from "../../src/agent/credentials.ts";
 import { resolvePaths } from "../../src/config/paths.ts";
 
-const ENABLED = process.env.GROVE_E2E === "1" && hasCredentials(process.env);
+// Enable when grove has a usable credential — including a Claude Code login (Keychain), not just env vars.
+const ENABLED = process.env.GROVE_E2E === "1" && detectUsableCredential(process.env).present;
 const maybe = ENABLED ? test : test.skip;
 
 let repo: string;
