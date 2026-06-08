@@ -26,6 +26,20 @@ test("findOrphans keeps running/blocked tasks", () => {
   expect(orphans).toEqual([]);
 });
 
+test("findOrphans reclaims blocked tasks when includeBlocked is set (but never running)", () => {
+  const orphans = findOrphans(
+    ["task_a", "task_b", "task_c"],
+    lookup({ task_a: "blocked", task_b: "running", task_c: "done" }),
+    { includeBlocked: true },
+  );
+  expect(orphans.sort()).toEqual(["task_a", "task_c"]); // blocked + done reclaimed; running kept
+});
+
+test("findOrphans without includeBlocked still keeps blocked tasks", () => {
+  const orphans = findOrphans(["task_a"], lookup({ task_a: "blocked" }));
+  expect(orphans).toEqual([]);
+});
+
 test("findOrphans de-duplicates ids seen from multiple sources", () => {
   const orphans = findOrphans(["task_a", "task_a", "task_b"], lookup({}));
   expect(orphans.sort()).toEqual(["task_a", "task_b"]);

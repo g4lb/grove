@@ -64,6 +64,31 @@ test("runGc does not reclaim an orphan whose compose down fails; surfaces an err
   expect(report.errors.some((e) => e.taskId === "task_downfail")).toBe(true);
 });
 
+test("runGc with includeBlocked reclaims a blocked task but never a running one", async () => {
+  const removed: string[] = [];
+  const report = await runGc(
+    deps({
+      discover: async () => ["task_blocked", "task_live"],
+      statusOf: (id) => (id === "task_blocked" ? "blocked" : "running"),
+      removeWorktree: async (id) => {
+        removed.push(id);
+      },
+    }),
+    { includeBlocked: true },
+  );
+  expect(report.reclaimed).toEqual(["task_blocked"]);
+  expect(report.kept).toEqual(["task_live"]);
+  expect(removed).toEqual(["task_blocked"]);
+});
+
+test("runGc without includeBlocked leaves a blocked task alone", async () => {
+  const report = await runGc(
+    deps({ discover: async () => ["task_blocked"], statusOf: () => "blocked" }),
+  );
+  expect(report.reclaimed).toEqual([]);
+  expect(report.kept).toEqual(["task_blocked"]);
+});
+
 test("runGc with no orphans reports nothing reclaimed", async () => {
   const report = await runGc(
     deps({ discover: async () => ["task_live"], statusOf: () => "running" }),

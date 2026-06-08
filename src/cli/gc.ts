@@ -14,19 +14,27 @@ export interface TaskStatusLookup {
 
 const TERMINAL: ReadonlySet<TaskStatus> = new Set<TaskStatus>(["done", "stopped"]);
 
+/** Options controlling which non-terminal tasks gc is allowed to reclaim. */
+export interface GcOptions {
+  /** Also reclaim `blocked` tasks (failed/no-commit sessions). Never reclaims `running`. */
+  includeBlocked?: boolean;
+}
+
 /**
  * Given candidate task ids discovered on disk / as compose projects, return the ids
  * that are safe to reclaim: those absent from the store, or in a terminal state.
- * Never reclaims running / blocked tasks.
+ * Never reclaims a `running` task; `blocked` tasks are reclaimed only with `includeBlocked`.
  */
-export function findOrphans(candidateIds: string[], lookup: TaskStatusLookup): string[] {
+export function findOrphans(candidateIds: string[], lookup: TaskStatusLookup, opts: GcOptions = {}): string[] {
   const seen = new Set<string>();
   const orphans: string[] = [];
   for (const id of candidateIds) {
     if (seen.has(id)) continue;
     seen.add(id);
     const status = lookup.statusOf(id);
-    if (status === null || TERMINAL.has(status)) {
+    const reclaimable =
+      status === null || TERMINAL.has(status) || (opts.includeBlocked === true && status === "blocked");
+    if (reclaimable) {
       orphans.push(id);
     }
   }
@@ -47,9 +55,9 @@ export interface GcReport {
   errors: Array<{ taskId: string; message: string }>;
 }
 
-export async function runGc(deps: GcDeps): Promise<GcReport> {
+export async function runGc(deps: GcDeps, opts: GcOptions = {}): Promise<GcReport> {
   const candidates = await deps.discover();
-  const orphans = findOrphans(candidates, { statusOf: deps.statusOf });
+  const orphans = findOrphans(candidates, { statusOf: deps.statusOf }, opts);
   const orphanSet = new Set(orphans);
 
   const report: GcReport = { reclaimed: [], kept: [], errors: [] };
