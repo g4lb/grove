@@ -55,6 +55,18 @@ test("start passes the prose and superpowers path into the engine", async () => 
   expect(capture.input!.repoPath).toBe("/repo");
 });
 
+test("start keeps the prompt visible and accumulates usage stats", async () => {
+  const engine = fakeEngine(task({ status: "done" }), [
+    { type: "usage", contextTokens: 5000, outputTokens: 100 },
+    { type: "usage", costUsd: 0.02, turns: 2 },
+  ]);
+  const c = new TaskRunController(engine, "/repo", "/sp");
+  await c.start("add a settings page");
+  const v = c.snapshot();
+  expect(v.prompt).toBe("add a settings page");
+  expect(v.stats).toEqual({ contextTokens: 5000, outputTokens: 100, costUsd: 0.02, turns: 2 });
+});
+
 test("a blocked session is reflected in state", async () => {
   const engine = fakeEngine(task({ status: "blocked" }));
   const c = new TaskRunController(engine, "/repo", "/sp");

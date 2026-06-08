@@ -21,7 +21,7 @@ function spyController(view: ControllerView) {
   };
 }
 
-const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
+const idle: ControllerView = { mode: "prompt", state: "idle", task: null, prompt: "", feed: [], stats: null, message: "", tasks: [], selected: 0, viewing: false };
 
 function delay(ms = 30) {
   return new Promise((r) => setTimeout(r, ms));
@@ -47,7 +47,9 @@ test("renders the live feed while running", () => {
     mode: "prompt",
     state: "running",
     task: null,
-    feed: ["· Write", "· Edit"],
+    prompt: "add a settings page",
+    feed: ["● Write(hello.txt)", "● Bash(git commit)"],
+    stats: null,
     message: "",
     tasks: [],
     selected: 0,
@@ -55,12 +57,12 @@ test("renders the live feed while running", () => {
   });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
-  expect(frame).toContain("· Write");
+  expect(frame).toContain("Write(hello.txt)");
   expect(frame.toLowerCase()).toContain("working");
 });
 
 test("renders the done message and a quit hint on a terminal state", () => {
-  const c = spyController({ mode: "prompt", state: "done", task: null, feed: [], message: "done — branch grove/t is ready", tasks: [], selected: 0, viewing: false });
+  const c = spyController({ mode: "prompt", state: "done", task: null, prompt: "x", feed: [], stats: null, message: "done — branch grove/t is ready", tasks: [], selected: 0, viewing: false });
   const { lastFrame } = render(<App controller={c as any} />);
   const frame = lastFrame() ?? "";
   expect(frame).toContain("done — branch grove/t is ready");

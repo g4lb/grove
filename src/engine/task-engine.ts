@@ -114,6 +114,8 @@ export class TaskEngine {
         composeProject: result.composeStarted ? `grove-${task.id}` : null,
       });
       this.store.appendEvent({ taskId: task.id, type: "provisioned", payload: { branch: result.worktree.branch } });
+      // Surface the isolation up front: this task runs in its own worktree + compose project.
+      this.emit(task.id, { type: "notice", message: `isolated worktree · ${result.worktree.branch}` });
       return await this.runSession(task.id, input.superpowersPath, input.description ?? input.title, result.worktree.baseSha);
     } finally {
       off();

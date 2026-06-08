@@ -15,6 +15,7 @@ test("SessionResult and SessionContext shapes hold", () => {
     success: true,
     summary: "done",
     costUsd: 0.01,
+    turns: 3,
     sessionId: "s1",
   };
   const ctx: SessionContext = {

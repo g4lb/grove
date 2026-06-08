@@ -18,8 +18,8 @@ export class FakeAgentRunner implements AgentRunner {
 }
 
 export function ok(summary = "done", events: AgentEvent[] = []): FakeSession {
-  return { events, result: { success: true, summary, costUsd: 0, sessionId: "s" } };
+  return { events, result: { success: true, summary, costUsd: 0, turns: 0, sessionId: "s" } };
 }
 export function fail(summary = "failed", events: AgentEvent[] = []): FakeSession {
-  return { events, result: { success: false, summary, costUsd: 0, sessionId: "s" } };
+  return { events, result: { success: false, summary, costUsd: 0, turns: 0, sessionId: "s" } };
 }

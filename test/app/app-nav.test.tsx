@@ -28,7 +28,7 @@ function spyController(view: ControllerView) {
   };
 }
 
-const idle: ControllerView = { mode: "prompt", state: "idle", task: null, feed: [], message: "", tasks: [], selected: 0, viewing: false };
+const idle: ControllerView = { mode: "prompt", state: "idle", task: null, prompt: "", feed: [], stats: null, message: "", tasks: [], selected: 0, viewing: false };
 function delay(ms = 40) { return new Promise((r) => setTimeout(r, ms)); }
 
 test("idle Enter routes input through submit (so /list works)", async () => {
